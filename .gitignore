@@ -7,6 +7,7 @@ __pycache__/
 venv/
 env/
 .venv/
+backend/venv
 
 # Environment Variables
 .env
@@ -25,3 +26,7 @@ newsletter_*.html
 .idea/
 .DS_Store
 Thumbs.db
+node_modules/
+build/
+.env
+frontend/node_modules
