@@ -6,7 +6,13 @@ frontend/node_modules/
 __pycache__/
 *.pyc
 
-# Env files
+# Virtual Environment
+venv/
+env/
+.venv/
+backend/venv
+
+# Environment Variables
 .env
 
 # Build files
@@ -16,3 +22,7 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+node_modules/
+build/
+.env
+frontend/node_modules
