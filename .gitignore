@@ -7,12 +7,21 @@ __pycache__/
 *.pyc
 
 # Virtual Environment
+
 venv/
 env/
 .venv/
 backend/venv
 
-# Environment Variables
+# Python
+
+**pycache**/
+_.pyc
+_.py[cod]
+\*$py.class
+
+# Env files
+
 .env
 
 # Build files
