@@ -1,27 +1,18 @@
-# Python bytecode
+# Node
+node_modules/
+frontend/node_modules/
+
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
 
-# Virtual Environment
-venv/
-env/
-.venv/
-
-# Environment Variables
+# Env files
 .env
 
-# Project Data (Avoid checking in large PDFs or local databases)
+# Build files
+build/
+dist/
 
-
-data/chroma_db/
-data/archive_memory/
-
-# Generated Output
-newsletter_*.html
-
-# IDE/System Files
-.vscode/
-.idea/
+# OS files
 .DS_Store
 Thumbs.db
