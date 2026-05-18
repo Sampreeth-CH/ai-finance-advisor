@@ -1,0 +1,120 @@
+# ================================
+# CORE BACKEND FRAMEWORK
+# ================================
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
+
+# ================================
+# DATABASE & ORM
+# ================================
+sqlalchemy
+psycopg2-binary
+alembic
+
+# ================================
+# AUTHENTICATION & SECURITY
+# ================================
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt
+python-dotenv
+
+# ================================
+# DATA PROCESSING & ANALYSIS
+# ================================
+pandas
+numpy
+
+# ================================
+# PDF PROCESSING
+# ================================
+pdfplumber
+PyPDF2
+
+# ================================
+# OCR / IMAGE PROCESSING
+# ================================
+pytesseract
+Pillow
+opencv-python
+
+# ================================
+# MACHINE LEARNING
+# ================================
+scikit-learn
+joblib
+
+# ================================
+# NLP & VECTOR EMBEDDINGS
+# ================================
+sentence-transformers
+faiss-cpu
+transformers
+torch
+
+# ================================
+# TIME SERIES FORECASTING
+# ================================
+prophet
+statsmodels
+
+# ================================
+# GENERATIVE AI / LLM
+# ================================
+openai
+langchain
+langchain-community
+langchain-core
+langchain-ollama
+ollama
+
+# ================================
+# API REQUESTS
+# ================================
+requests
+httpx
+
+# ================================
+# CLOUD / AWS
+# ================================
+boto3
+
+# ================================
+# REAL-TIME & ASYNC
+# ================================
+websockets
+aiofiles
+celery
+redis
+
+# ================================
+# REPORT GENERATION
+# ================================
+reportlab
+fpdf
+
+# ================================
+# VISUALIZATION & ANALYTICS
+# ================================
+matplotlib
+plotly
+
+# ================================
+# TESTING
+# ================================
+pytest
+
+# ================================
+# LOGGING & UTILITIES
+# ================================
+loguru
+rich
+
+# ================================
+# OPTIONAL PERFORMANCE
+# ================================
+orjson
+ujson
