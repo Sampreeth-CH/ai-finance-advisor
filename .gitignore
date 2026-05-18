@@ -1,13 +1,17 @@
 # Node
-
 node_modules/
 frontend/node_modules/
+
+# Python
+__pycache__/
+*.pyc
 
 # Virtual Environment
 
 venv/
 env/
 .venv/
+backend/venv
 
 # Python
 
@@ -21,27 +25,13 @@ _.py[cod]
 .env
 
 # Build files
-
 build/
 dist/
 
 # OS files
-
 .DS_Store
 Thumbs.db
-
-# Project Data (Avoid checking in large PDFs or local databases)
-
-data/chroma_db/
-data/archive_memory/
-
-# Generated Output
-
-newsletter\_\*.html
-
-# IDE/System Files
-
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
+node_modules/
+build/
+.env
+frontend/node_modules
