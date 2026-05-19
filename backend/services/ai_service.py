@@ -1,37 +1,34 @@
-import os
-from dotenv import load_dotenv
-from openai import OpenAI
-
-load_dotenv()
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 import requests
+import os
 
 def generate_ai_insights_llm(analysis):
-    prompt = f"""
-    You are a smart financial advisor.
 
-    Analyze the following user spending data:
-    {analysis}
+    # 🔥 If running locally (Ollama)
+    if os.getenv("USE_OLLAMA") == "true":
+        try:
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "mistral",
+                    "prompt": f"""
+                    You are a smart financial advisor.
+                    Analyze:
+                    {analysis}
+                    """,
+                    "stream": False
+                }
+            )
+            return response.json()["response"]
 
-    Give:
-    - Key insights
-    - Overspending warnings
-    - Saving suggestions
-    """
+        except Exception as e:
+            return f"Ollama Error: {str(e)}"
 
-    try:
-        response = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": "llama3",
-                "prompt": prompt,
-                "stream": False
-            }
-        )
+    # 🌐 For deployment (fallback)
+    else:
+        return f"""
+        AI Insight (Demo Mode):
 
-        return response.json()["response"]
-
-    except Exception as e:
-        raise Exception(f"Ollama Error: {str(e)}")
+        - You are spending heavily on food.
+        - Try reducing unnecessary expenses.
+        - Save at least 20% of income.
+        """
