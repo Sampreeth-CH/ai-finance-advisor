@@ -31,22 +31,18 @@ const FloatingAssistant = () => {
     setIsLoading(true)
 
     try {
-      const recentHistory = currentMessages
-        .slice(-4)
-        .map((m) => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`)
-        .join('\n')
-      const smartPrompt = `Context of our conversation:\n${recentHistory}\n\nPlease reply to the User's last message. Format any currency in Indian Rupees (₹).`
+      // FIX: We are now pointing to a dedicated conversational endpoint
+      // We send the current message AND the chat history so the AI remembers context
+      const payload = {
+        message: input,
+        history: currentMessages.slice(-5), // Send the last 5 messages for context
+      }
 
-      const response = await api.post('/manual/', [
-        {
-          Description: smartPrompt,
-          Amount: 0.0,
-        },
-      ])
+      const response = await api.post('/chat', payload)
 
       const assistantMessage = {
         role: 'assistant',
-        content: response.data.insights || "I've processed your request.",
+        content: response.data.reply || "I've processed your request.",
       }
       setMessages((prev) => [...prev, assistantMessage])
     } catch (error) {
