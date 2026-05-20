@@ -1,41 +1,68 @@
 import requests
 from app.core.config import settings
 
-def generate_ai_insights_llm(analysis, history_data: list = None):
-    # 1. Format the history into a readable string for the AI
-    history_context = "No previous history available."
-    if history_data:
-        # We pass the raw data directly to the LLM to analyze past trends
-        history_context = f"User has {len(history_data)} past transactions on record. Here is their historical data: {history_data}"
+def generate_ai_insights_llm(analysis, history_data=None):
+    if not analysis:
+        return "No financial data available to analyze yet. Add some transactions!"
 
-    # 2. Build the context-aware prompt
-    prompt = f"""
-    You are a smart financial advisor.
-
-    CURRENT UPLOAD ANALYSIS:
-    {analysis}
+    # 1. Build a clean summary of the financial data for the AI to read
+    context = f"Total Income: ₹{analysis.get('total_income', 0)}\n"
+    context += f"Total Expenses: ₹{analysis.get('total_expense', 0)}\n"
+    context += f"Net Allocation: ₹{analysis.get('net_allocation', 0)}\n"
     
-    USER'S HISTORICAL CONTEXT (Past Transactions):
-    {history_context}
+    if 'category_spending' in analysis:
+        context += "Spending by Category:\n"
+        for cat, amt in analysis['category_spending'].items():
+            context += f"- {cat}: ₹{amt}\n"
 
-    Based on BOTH their past history and their current upload, give:
-    - Key insights (Compare current spending to their past habits)
-    - Overspending warnings
-    - Saving suggestions
-    """
+    if history_data:
+        context += "\nRecent Transactions:\n"
+        for tx in history_data[:10]: # Limit to 10 so we don't overwhelm the prompt
+            context += f"- {tx.get('date')}: {tx.get('description')} (₹{tx.get('amount')})\n"
 
+    # 2. Instruct Llama 3.3 exactly how to write the dashboard report
+    prompt = f"""You are an expert AI Personal Finance Advisor.
+Analyze the user's current financial snapshot:
+
+{context}
+
+Provide a short, punchy, and actionable 3-paragraph summary:
+1. A brief observation on their overall cash flow.
+2. Identify their biggest spending category and offer a specific, realistic tip to optimize it.
+3. An encouraging closing thought.
+
+Keep it conversational, insightful, and concise. 
+Format all currency in Indian Rupees (₹). 
+Use Markdown formatting (like **bolding** key terms and numbers) so it looks beautiful on the dashboard.
+"""
+
+    # 3. Call Groq's Blazing Fast API
     try:
-        # 3. Keep your exact same API request logic
-        response = requests.post(
-            f"{settings.OLLAMA_URL}/api/generate",
-            json={
-                "model": settings.OLLAMA_MODEL,
-                "prompt": prompt,
-                "stream": False
-            }
-        )
+        api_key = settings.GROQ_API_KEY
+        if not api_key:
+            return "Groq API Key is missing. Please add it to your .env file."
 
-        return response.json()["response"]
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "model": "llama-3.3-70b-versatile", # Using the brand new, supported model!
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.7
+        }
 
+        res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data)
+        
+        # Check if Groq accepted the request
+        if res.status_code != 200:
+            error_details = res.json().get("error", {}).get("message", res.text)
+            return f"**Groq API Error ({res.status_code}):** {error_details}"
+
+        return res.json()["choices"][0]["message"]["content"]
+        
     except Exception as e:
-        raise Exception(f"Ollama Error: {str(e)}")
+        return f"**System Error connecting to AI:** {str(e)}"

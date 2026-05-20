@@ -20,16 +20,33 @@ from datetime import datetime
 from app.core.dependencies import get_current_user
 from app.services.transaction_service import get_user_transactions
 from app.models.user import User
-
 from app.routers.transaction_router import router as transaction_router
 
+# New Imports for Chat and Database Lifespan
+import requests
+from pydantic import BaseModel
+from contextlib import asynccontextmanager
+from app.core.database import Base, engine
 
 print(settings.APP_NAME)
 
-app = FastAPI()
+class ChatPayload(BaseModel):
+    message: str
+    history: list = []
+
+# ==========================================
+# MODERN LIFESPAN: AUTO-CREATES TABLES IN SUPABASE
+# ==========================================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # This automatically syncs your Python models with the cloud database on boot
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 app.include_router(transaction_router)
-
 app.include_router(auth_router)
 
 app.add_middleware(
@@ -41,8 +58,6 @@ app.add_middleware(
 )
 
 UPLOAD_DIR = "uploads"
-
-# Ensure upload folder exists
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.get("/")
@@ -68,27 +83,20 @@ async def upload_file(
         else:
             return {"error": "Unsupported file format"}
 
-        # 1. Categorization
         df["Category"] = df["Description"].apply(predict_category)
 
-        # 2. Save all file transactions to PostgreSQL (NEW!)
         for _, row in df.iterrows():
             new_tx = Transaction(
-                amount=float(row["Amount"]), # Assuming your CSV/PDF has an 'Amount' column
+                amount=float(row["Amount"]), 
                 description=str(row["Description"]),
                 category=str(row["Category"]),
-                date=datetime.utcnow(), # We can parse real dates from CSV later
+                date=datetime.utcnow(), 
                 user_id=current_user.id
             )
             db.add(new_tx)
         
-        # Commit all rows from the file to the database
         await db.commit()
-
-        # 3. Analysis
         analysis = analyze_finances(df)
-
-        # 4. AI Insights (LLM)
         insights = generate_ai_insights_llm(analysis)
 
     except Exception as e:
@@ -108,13 +116,10 @@ async def manual_entry(
     current_user: User = Depends(get_current_user)
 ):
     import pandas as pd
-
     df = pd.DataFrame(data)
 
-    # 1. Categorization
     df["Category"] = df["Description"].apply(categorize_transaction)
 
-    # 2. Save new transactions to PostgreSQL
     for _, row in df.iterrows():
         new_tx = Transaction(
             amount=float(row["Amount"]),
@@ -126,15 +131,10 @@ async def manual_entry(
         db.add(new_tx)
     
     await db.commit()
-
-    # 3. Analysis (Current batch)
     analysis = analyze_finances(df)
 
-    # 4. FETCH AI MEMORY (NEW!)
-    # Grab the last 30 transactions for this specific user
     raw_history = await get_user_transactions(db, current_user.id, limit=30)
     
-    # Format it into a clean list of dictionaries so Llama 3 can read it easily
     history_data = [
         {
             "date": str(tx.date.date()), 
@@ -145,7 +145,6 @@ async def manual_entry(
         for tx in raw_history
     ]
 
-    # 5. AI Insights (Now with memory!)
     try:
         insights = generate_ai_insights_llm(analysis, history_data)
     except Exception as e:
@@ -157,17 +156,11 @@ async def manual_entry(
         "insights": insights
     }
 
-
 @app.get("/dashboard/")
 async def get_dashboard(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    The main landing page for the user. 
-    Fetches history, analyzes it, and provides daily AI advice.
-    """
-    # 1. Fetch user's entire history (e.g., last 100 transactions)
     raw_history = await get_user_transactions(db, current_user.id, limit=100)
 
     if not raw_history:
@@ -177,7 +170,6 @@ async def get_dashboard(
             "insights": None
         }
 
-    # 2. Convert database history into a Pandas DataFrame for analysis
     import pandas as pd
     data = [{
         "Amount": tx.amount,
@@ -187,11 +179,8 @@ async def get_dashboard(
     } for tx in raw_history]
     
     df = pd.DataFrame(data)
-
-    # 3. Run Pandas Analysis on historical data
     analysis = analyze_finances(df)
 
-    # 4. Prepare history for AI (Limit to 30 so we don't overwhelm Llama 3's context window)
     history_data = [
         {
             "date": str(tx.date.date()), 
@@ -202,7 +191,6 @@ async def get_dashboard(
         for tx in raw_history[:30]
     ]
 
-    # 5. Generate fresh AI Insights
     try:
         insights = generate_ai_insights_llm(analysis, history_data)
     except Exception as e:
@@ -215,11 +203,69 @@ async def get_dashboard(
         "ai_advisor": insights
     }
 
+@app.post("/chat")
+async def chat_with_ai(
+    payload: ChatPayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    raw_history = await get_user_transactions(db, current_user.id, limit=15)
+    
+    if raw_history:
+        tx_context = "\n".join([f"{tx.date.date()}: {tx.description} (₹{tx.amount})" for tx in raw_history])
+    else:
+        tx_context = "No transactions found yet."
+
+    chat_context = "\n".join([f"{msg.get('role', 'user').capitalize()}: {msg.get('content', '')}" for msg in payload.history])
+
+    prompt = f"""You are a brilliant, helpful AI Personal Finance Advisor.
+Here are the user's most recent transactions:
+{tx_context}
+
+Here is the recent conversation history:
+{chat_context}
+
+Please reply directly to the User's last message. Keep it conversational, helpful, and concise. Format any currency in Indian Rupees (₹).
+"""
+
+    try:
+        api_key = settings.GROQ_API_KEY
+        
+        if not api_key:
+            return {"reply": "API Key is missing. Please check your .env file and config.py."}
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.7
+        }
+        
+        res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data)
+        
+        if res.status_code != 200:
+            error_details = res.json().get("error", {}).get("message", res.text)
+            return {"reply": f"Groq Error ({res.status_code}): {error_details}"}
+
+        res_data = res.json()
+        reply_text = res_data["choices"][0]["message"]["content"]
+        
+    except Exception as e:
+        reply_text = f"System Error: {str(e)}"
+
+    return {"reply": reply_text}
+
+
 @app.get("/me")
 async def get_me(
     current_user: User = Depends(get_current_user)
 ):
-
     return {
         "id": current_user.id,
         "name": current_user.full_name,
