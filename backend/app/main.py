@@ -21,7 +21,7 @@ from app.core.dependencies import get_current_user
 from app.services.transaction_service import get_user_transactions
 from app.models.user import User
 from app.routers.transaction_router import router as transaction_router
-
+from sqlalchemy import delete
 # New Imports for Chat and Database Lifespan
 import requests
 from pydantic import BaseModel
@@ -155,6 +155,21 @@ async def manual_entry(
         "analysis": analysis,
         "insights": insights
     }
+
+@app.delete("/clear/")
+async def clear_all_transactions(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        # This safely deletes ONLY the logged-in user's transactions
+        stmt = delete(Transaction).where(Transaction.user_id == current_user.id)
+        await db.execute(stmt)
+        await db.commit()
+        return {"message": "History cleared successfully"}
+    except Exception as e:
+        await db.rollback()
+        return {"error": str(e)}
 
 @app.get("/dashboard/")
 async def get_dashboard(
