@@ -4,6 +4,15 @@ import api from '../services/api'
 import { UploadCloud, Plus, FileText, Trash2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
+// Add this helper function to format as Indian Rupees (INR)
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2,
+  }).format(amount)
+}
+
 const TransactionsPage = () => {
   const { transactions, fetchTransactions, loading } = useAppStore()
   const [isUploading, setIsUploading] = useState(false)
@@ -26,7 +35,6 @@ const TransactionsPage = () => {
 
     setIsUploading(true)
     try {
-      // FIX 1: Changed from /transactions/upload/ to /upload/
       await api.post('/upload/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
@@ -59,11 +67,9 @@ const TransactionsPage = () => {
   const submitManualEntries = async (e) => {
     e.preventDefault()
 
-    // Filter out invalid entries and format for the Python Pandas backend
     const validEntries = manualEntries
       .filter((entry) => entry.description.trim() && entry.amount !== '')
       .map((entry) => ({
-        // FIX 3: Capitalized Description and Amount so Pandas can read it properly
         Description: entry.description,
         Amount: parseFloat(entry.amount),
       }))
@@ -72,7 +78,6 @@ const TransactionsPage = () => {
 
     setIsSubmittingManual(true)
     try {
-      // FIX 2: Changed from /transactions/manual/ to /manual/
       await api.post('/manual/', validEntries)
       setManualEntries([{ description: '', amount: '' }])
       await fetchTransactions()
@@ -241,8 +246,9 @@ const TransactionsPage = () => {
                     <td
                       className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${tx.amount < 0 ? 'text-red-400' : 'text-emerald-400'}`}
                     >
-                      {tx.amount < 0 ? '-' : '+'}$
-                      {Math.abs(tx.amount).toFixed(2)}
+                      {/* This is the line that was changed! */}
+                      {tx.amount < 0 ? '-' : '+'}
+                      {formatCurrency(Math.abs(tx.amount))}
                     </td>
                   </tr>
                 ))}

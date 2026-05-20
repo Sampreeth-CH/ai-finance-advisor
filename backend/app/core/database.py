@@ -10,15 +10,15 @@ from sqlalchemy.orm import (
 
 from app.core.config import settings
 
-# ==========================================
-# UPDATED CLOUD-OPTIMIZED ENGINE
-# ==========================================
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=True,
-    pool_pre_ping=True,  # Automatically tests connection health before pinging
+    pool_pre_ping=True, 
     connect_args={
-        "command_timeout": 60, # Prevents silent network drops in the cloud
+        "command_timeout": 60,
+        # THE FIX: Tell asyncpg to disable caching for the transaction pooler
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
     }
 )
 
