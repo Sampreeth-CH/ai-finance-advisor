@@ -89,6 +89,23 @@ const TransactionsPage = () => {
     }
   }
 
+  // --- NEW: Clear History Function ---
+  const handleClearHistory = async () => {
+    const isConfirmed = window.confirm(
+      'Are you sure you want to delete ALL your transactions? This cannot be undone.',
+    )
+
+    if (isConfirmed) {
+      try {
+        await api.delete('/clear/')
+        await fetchTransactions() // Refresh the table to show it is empty
+      } catch (error) {
+        console.error('Failed to clear history', error)
+        alert('Failed to clear history. Please try again.')
+      }
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -97,6 +114,15 @@ const TransactionsPage = () => {
     >
       <div className='flex justify-between items-center'>
         <h1 className='text-2xl font-bold text-white'>Transactions</h1>
+
+        {/* --- NEW: Clear History Button --- */}
+        <button
+          onClick={handleClearHistory}
+          className='flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border border-red-500/20 rounded-lg transition-colors text-sm font-medium'
+        >
+          <Trash2 size={16} />
+          Reset History
+        </button>
       </div>
 
       <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
@@ -246,7 +272,6 @@ const TransactionsPage = () => {
                     <td
                       className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${tx.amount < 0 ? 'text-red-400' : 'text-emerald-400'}`}
                     >
-                      {/* This is the line that was changed! */}
                       {tx.amount < 0 ? '-' : '+'}
                       {formatCurrency(Math.abs(tx.amount))}
                     </td>
