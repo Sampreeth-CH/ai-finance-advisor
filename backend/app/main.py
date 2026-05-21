@@ -34,6 +34,50 @@ class ChatPayload(BaseModel):
     message: str
     history: list = []
 
+# --- NEW: FinScore Calculation Algorithm ---
+def calculate_finscore(transactions_list):
+    """Calculates a proprietary FinScore (300 to 850) based on financial behavior."""
+    base_score = 500
+    total_income = 0
+    total_expense = 0
+    junk_count = 0
+    
+    # Keywords that indicate unnecessary spending
+    junk_keywords = ['swiggy', 'zomato', 'zepto', 'blinkit', 'starbucks', 'movie', 'zara', 'myntra', 'netflix', 'amazon', 'dining', 'food', 'shopping']
+    
+    for tx in transactions_list:
+        amount = float(tx.amount)
+        desc = str(tx.description).lower()
+        category = str(tx.category).lower() if tx.category else ""
+        
+        if amount > 0:
+            total_income += amount
+        else:
+            total_expense += abs(amount)
+            # Penalize junk spending
+            if any(keyword in desc for keyword in junk_keywords) or any(keyword in category for keyword in junk_keywords):
+                junk_count += 1
+
+    # 1. Savings Rate Bonus (Up to +250 points)
+    if total_income > 0:
+        savings_rate = (total_income - total_expense) / total_income
+        if savings_rate > 0:
+            base_score += int(savings_rate * 250)
+        else:
+            base_score -= 50  # Penalty for spending more than earning
+            
+    # 2. Junk Penalty (-15 points per junk transaction)
+    base_score -= (junk_count * 15)
+    
+    # 3. Consistency/Activity Bonus (+25 to +50 points for tracking consistently)
+    if len(transactions_list) > 10:
+        base_score += 25
+    if len(transactions_list) > 30:
+        base_score += 25
+        
+    # Clamp the score to look like a real credit score (300 min, 850 max)
+    return max(300, min(850, base_score))
+
 # ==========================================
 # MODERN LIFESPAN: AUTO-CREATES TABLES IN SUPABASE
 # ==========================================
@@ -121,12 +165,29 @@ async def manual_entry(
     df["Category"] = df["Description"].apply(categorize_transaction)
 
     for _, row in df.iterrows():
+        # --- NEW: Split Calculation Logic ---
+        original_amount = float(row["Amount"])
+        
+        # Safely extract 'SplitWith' (Handles missing keys or Pandas NaN values)
+        raw_split = row.get("SplitWith", "")
+        split_person = str(raw_split).strip() if pd.notna(raw_split) else ""
+        
+        final_expense = original_amount
+        split_debt = 0.0
+        
+        # If the user tagged a friend, cut the expense in half and log the debt
+        if split_person and split_person.lower() != "nan" and original_amount < 0: 
+            final_expense = original_amount / 2.0
+            split_debt = abs(final_expense) # The friend owes positive money back
+
         new_tx = Transaction(
-            amount=float(row["Amount"]),
+            amount=final_expense, # Log only the user's portion
             description=str(row["Description"]),
             category=str(row["Category"]),
             date=datetime.utcnow(),
-            user_id=current_user.id
+            user_id=current_user.id,
+            split_with=split_person if split_person and split_person.lower() != "nan" else None,
+            split_amount=split_debt if split_person and split_person.lower() != "nan" else None
         )
         db.add(new_tx)
     
@@ -182,7 +243,9 @@ async def get_dashboard(
         return {
             "message": f"Welcome, {current_user.email}! You have no transactions yet. Upload a CSV/PDF to get started.",
             "analysis": None,
-            "insights": None
+            "insights": None,
+            "fin_score": 650, # Default score
+            "receivables": [] # --- NEW: Empty list fallback
         }
 
     import pandas as pd
@@ -211,11 +274,29 @@ async def get_dashboard(
     except Exception as e:
         insights = f"AI could not generate insights: {str(e)}"
 
+    # Calculate the user's score based on their raw history
+    calculated_score = calculate_finscore(raw_history)
+
+    # --- NEW: Calculate Who Owes Me ---
+    receivables = {}
+    for tx in raw_history:
+        if tx.split_with and tx.split_amount:
+            # Group debts by person (e.g., if Rahul owes you for 3 different dinners)
+            if tx.split_with in receivables:
+                receivables[tx.split_with] += tx.split_amount
+            else:
+                receivables[tx.split_with] = tx.split_amount
+
+    # Convert dictionary to a nice list for the frontend
+    receivables_list = [{"name": k, "amount": v} for k, v in receivables.items() if v > 0]
+
     return {
         "user": current_user.full_name or current_user.email,
         "total_transactions": len(raw_history),
         "analysis": analysis,
-        "ai_advisor": insights
+        "ai_advisor": insights,
+        "fin_score": calculated_score, 
+        "receivables": receivables_list # --- NEW: Send debts to frontend ---
     }
 
 @app.post("/chat")

@@ -20,12 +20,25 @@ import {
 import { motion } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 
+import WealthSimulator from '../components/WealthSimulator'
+import FinScoreCard from '../components/FinScoreCard'
+// --- NEW: Import the Shared Wallets Component ---
+import ReceivablesWidget from '../components/ReceivablesWidget'
+
 const DashboardPage = () => {
-  const { dashboardData, fetchDashboard, loading, error } = useAppStore()
+  const {
+    dashboardData,
+    transactions,
+    fetchDashboard,
+    fetchTransactions,
+    loading,
+    error,
+  } = useAppStore()
 
   useEffect(() => {
     fetchDashboard()
-  }, [fetchDashboard])
+    fetchTransactions()
+  }, [fetchDashboard, fetchTransactions])
 
   // SAFETY FIX 1: Handle errors gracefully so it doesn't spin forever
   if (error && !dashboardData) {
@@ -58,7 +71,9 @@ const DashboardPage = () => {
     )
   }
 
-  const { analysis, ai_advisor } = dashboardData
+  // --- NEW: Extract fin_score AND receivables from the backend data ---
+  const { analysis, ai_advisor, fin_score, receivables } = dashboardData
+  const userScore = fin_score || 650 // Default fallback while calculating
 
   // SAFETY FIX 3: Force Pandas data into safe JavaScript structures
   const chartData =
@@ -100,6 +115,14 @@ const DashboardPage = () => {
         <h1 className='text-2xl font-bold text-white'>Financial Overview</h1>
       </div>
 
+      {/* --- The Wealth Simulator Component --- */}
+      {transactions && transactions.length > 0 && (
+        <WealthSimulator transactions={transactions} />
+      )}
+
+      {/* --- The FinScore Gamification Component --- */}
+      <FinScoreCard score={userScore} />
+
       {/* Summary Cards */}
       <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
         <StatCard
@@ -123,7 +146,7 @@ const DashboardPage = () => {
       </div>
 
       {/* Main Content Area */}
-      <div className='grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0'>
+      <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
         {/* Chart Area */}
         <div className='lg:col-span-2 glass-panel p-6 flex flex-col'>
           <h2 className='text-lg font-semibold text-white mb-6'>
@@ -183,52 +206,53 @@ const DashboardPage = () => {
           </div>
         </div>
 
-        {/* AI Insights Area */}
-        <div className='glass-panel p-6 flex flex-col border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.05)] relative overflow-hidden'>
-          <div className='absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 blur-[50px] pointer-events-none rounded-full' />
+        {/* --- NEW: The Shared Wallets Widget --- */}
+        <div className='lg:col-span-1 h-[400px] lg:h-auto'>
+          <ReceivablesWidget receivables={receivables} />
+        </div>
+      </div>
 
-          <div className='flex items-center gap-3 mb-6'>
-            <div className='p-2 bg-cyan-500/20 rounded-lg'>
-              <Sparkles className='text-cyan-400 w-5 h-5' />
+      {/* AI Insights Area */}
+      <div className='glass-panel p-6 flex flex-col border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.05)] relative overflow-hidden'>
+        <div className='absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 blur-[50px] pointer-events-none rounded-full' />
+
+        <div className='flex items-center gap-3 mb-6'>
+          <div className='p-2 bg-cyan-500/20 rounded-lg'>
+            <Sparkles className='text-cyan-400 w-5 h-5' />
+          </div>
+          <h2 className='text-lg font-semibold text-white'>
+            AI Advisor Insights
+          </h2>
+        </div>
+
+        <div className='flex-1 overflow-y-auto pr-2'>
+          {ai_advisor ? (
+            <div className='text-slate-300 leading-relaxed text-sm'>
+              <ReactMarkdown
+                components={{
+                  strong: ({ node, ...props }) => (
+                    <span className='font-bold text-cyan-400' {...props} />
+                  ),
+                  p: ({ node, ...props }) => (
+                    <p className='mb-3 last:mb-0' {...props} />
+                  ),
+                  ul: ({ node, ...props }) => (
+                    <ul className='list-disc ml-5 mb-3 space-y-1' {...props} />
+                  ),
+                  li: ({ node, ...props }) => (
+                    <li className='mb-1' {...props} />
+                  ),
+                }}
+              >
+                {String(ai_advisor)}
+              </ReactMarkdown>
             </div>
-            <h2 className='text-lg font-semibold text-white'>
-              AI Advisor Insights
-            </h2>
-          </div>
-
-          <div className='flex-1 overflow-y-auto pr-2'>
-            {ai_advisor ? (
-              // CRITICAL FIX: Wrapped ReactMarkdown in a div to hold the className.
-              <div className='text-slate-300 leading-relaxed text-sm'>
-                <ReactMarkdown
-                  components={{
-                    strong: ({ node, ...props }) => (
-                      <span className='font-bold text-cyan-400' {...props} />
-                    ),
-                    p: ({ node, ...props }) => (
-                      <p className='mb-3 last:mb-0' {...props} />
-                    ),
-                    ul: ({ node, ...props }) => (
-                      <ul
-                        className='list-disc ml-5 mb-3 space-y-1'
-                        {...props}
-                      />
-                    ),
-                    li: ({ node, ...props }) => (
-                      <li className='mb-1' {...props} />
-                    ),
-                  }}
-                >
-                  {String(ai_advisor)}
-                </ReactMarkdown>
-              </div>
-            ) : (
-              <p className='text-slate-500 italic'>
-                No AI insights generated yet. Add more transactions to get
-                personalized advice.
-              </p>
-            )}
-          </div>
+          ) : (
+            <p className='text-slate-500 italic'>
+              No AI insights generated yet. Add more transactions to get
+              personalized advice.
+            </p>
+          )}
         </div>
       </div>
     </motion.div>

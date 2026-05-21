@@ -3,6 +3,7 @@ import { useAppStore } from '../store/appStore'
 import api from '../services/api'
 import { UploadCloud, Plus, FileText, Trash2 } from 'lucide-react'
 import { motion } from 'framer-motion'
+import ReceiptScanner from '../components/ReceiptScanner'
 
 // Add this helper function to format as Indian Rupees (INR)
 const formatCurrency = (amount) => {
@@ -16,8 +17,9 @@ const formatCurrency = (amount) => {
 const TransactionsPage = () => {
   const { transactions, fetchTransactions, loading } = useAppStore()
   const [isUploading, setIsUploading] = useState(false)
+  // --- NEW: Added splitWith to the default state ---
   const [manualEntries, setManualEntries] = useState([
-    { description: '', amount: '' },
+    { description: '', amount: '', splitWith: '' },
   ])
   const [isSubmittingManual, setIsSubmittingManual] = useState(false)
   const fileInputRef = useRef(null)
@@ -49,7 +51,11 @@ const TransactionsPage = () => {
   }
 
   const handleManualAdd = () => {
-    setManualEntries([...manualEntries, { description: '', amount: '' }])
+    // --- NEW: Included splitWith in the new row generator ---
+    setManualEntries([
+      ...manualEntries,
+      { description: '', amount: '', splitWith: '' },
+    ])
   }
 
   const handleManualRemove = (index) => {
@@ -64,6 +70,32 @@ const TransactionsPage = () => {
     setManualEntries(newEntries)
   }
 
+  // Handle the result from the OCR Scanner
+  const handleScanComplete = (amount) => {
+    if (amount) {
+      const updatedEntries = [...manualEntries]
+      const emptyIndex = updatedEntries.findIndex(
+        (e) => e.description === '' && e.amount === '',
+      )
+
+      if (emptyIndex !== -1) {
+        updatedEntries[emptyIndex] = {
+          description: 'Scanned Receipt',
+          amount: amount,
+          splitWith: '', // --- NEW: Added fallback for OCR
+        }
+        setManualEntries(updatedEntries)
+      } else {
+        setManualEntries([
+          ...updatedEntries,
+          { description: 'Scanned Receipt', amount: amount, splitWith: '' }, // --- NEW: Added fallback for OCR
+        ])
+      }
+    } else {
+      alert("Couldn't find a clear total amount. Please enter it manually.")
+    }
+  }
+
   const submitManualEntries = async (e) => {
     e.preventDefault()
 
@@ -72,6 +104,7 @@ const TransactionsPage = () => {
       .map((entry) => ({
         Description: entry.description,
         Amount: parseFloat(entry.amount),
+        SplitWith: entry.splitWith || '', // --- NEW: Map state to the API payload
       }))
 
     if (validEntries.length === 0) return
@@ -79,7 +112,8 @@ const TransactionsPage = () => {
     setIsSubmittingManual(true)
     try {
       await api.post('/manual/', validEntries)
-      setManualEntries([{ description: '', amount: '' }])
+      // --- NEW: Reset state with splitWith included ---
+      setManualEntries([{ description: '', amount: '', splitWith: '' }])
       await fetchTransactions()
     } catch (error) {
       console.error('Failed to submit manual transactions', error)
@@ -89,7 +123,7 @@ const TransactionsPage = () => {
     }
   }
 
-  // --- NEW: Clear History Function ---
+  // Clear History Function
   const handleClearHistory = async () => {
     const isConfirmed = window.confirm(
       'Are you sure you want to delete ALL your transactions? This cannot be undone.',
@@ -98,7 +132,7 @@ const TransactionsPage = () => {
     if (isConfirmed) {
       try {
         await api.delete('/clear/')
-        await fetchTransactions() // Refresh the table to show it is empty
+        await fetchTransactions()
       } catch (error) {
         console.error('Failed to clear history', error)
         alert('Failed to clear history. Please try again.')
@@ -115,7 +149,6 @@ const TransactionsPage = () => {
       <div className='flex justify-between items-center'>
         <h1 className='text-2xl font-bold text-white'>Transactions</h1>
 
-        {/* --- NEW: Clear History Button --- */}
         <button
           onClick={handleClearHistory}
           className='flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border border-red-500/20 rounded-lg transition-colors text-sm font-medium'
@@ -170,9 +203,18 @@ const TransactionsPage = () => {
               <Plus size={16} /> Add Row
             </button>
           </div>
+
+          {/* The Receipt Scanner Component */}
+          <div className='mb-6'>
+            <ReceiptScanner onScanComplete={handleScanComplete} />
+          </div>
+
           <form onSubmit={submitManualEntries} className='space-y-3'>
             {manualEntries.map((entry, index) => (
-              <div key={index} className='flex gap-3 items-start'>
+              <div
+                key={index}
+                className='flex flex-wrap md:flex-nowrap gap-3 items-start'
+              >
                 <input
                   type='text'
                   placeholder='Description (e.g. Groceries)'
@@ -180,7 +222,7 @@ const TransactionsPage = () => {
                   onChange={(e) =>
                     handleManualChange(index, 'description', e.target.value)
                   }
-                  className='glass-input flex-1'
+                  className='glass-input flex-1 min-w-[200px]'
                   required
                 />
                 <input
@@ -191,14 +233,26 @@ const TransactionsPage = () => {
                   onChange={(e) =>
                     handleManualChange(index, 'amount', e.target.value)
                   }
-                  className='glass-input w-32'
+                  className='glass-input w-full md:w-32'
                   required
                 />
+
+                {/* --- NEW: The Split With Input Box --- */}
+                <input
+                  type='text'
+                  placeholder='Split With (Optional)'
+                  value={entry.splitWith}
+                  onChange={(e) =>
+                    handleManualChange(index, 'splitWith', e.target.value)
+                  }
+                  className='glass-input w-full md:w-48 text-blue-400 placeholder:text-blue-500/50'
+                />
+
                 {manualEntries.length > 1 && (
                   <button
                     type='button'
                     onClick={() => handleManualRemove(index)}
-                    className='p-2 text-slate-500 hover:text-red-400 mt-1 transition-colors'
+                    className='p-2 text-slate-500 hover:text-red-400 mt-1 transition-colors w-full md:w-auto flex justify-center'
                   >
                     <Trash2 size={18} />
                   </button>
