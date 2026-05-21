@@ -9,6 +9,9 @@ import DashboardLayout from './layouts/DashboardLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 import { useAppStore } from './store/appStore'
 
+// --- NEW: Import the Voice Chat Bot ---
+import VoiceChatBot from './components/VoiceChatBot'
+
 function App() {
   const { token, fetchUser } = useAppStore()
 
@@ -40,6 +43,11 @@ function App() {
 
         <Route path='*' element={<Navigate to='/' replace />} />
       </Routes>
+
+      {/* --- NEW: The Floating AI Assistant --- */}
+      {/* It sits outside the Routes so it persists across pages, 
+          but ONLY renders if the user is logged in (token exists) */}
+      {token && <VoiceChatBot />}
     </BrowserRouter>
   )
 }
