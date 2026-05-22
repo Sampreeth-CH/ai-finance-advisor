@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
+import api from '../services/api'
 import {
   BarChart,
   Bar,
@@ -16,6 +17,7 @@ import {
   TrendingDown,
   Sparkles,
   AlertCircle,
+  DownloadCloud,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
@@ -40,6 +42,22 @@ const DashboardPage = () => {
     fetchTransactions()
   }, [fetchDashboard, fetchTransactions])
 
+  const handleDownloadReport = async () => {
+    try {
+      const res = await api.get('/export/dashboard/', { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', 'Executive_Report.pdf')
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (error) {
+      alert('Failed to generate report.')
+      console.error(error)
+    }
+  }
+
   if (error && !dashboardData) {
     return (
       <div className='h-full flex flex-col items-center justify-center text-center space-y-4'>
@@ -52,7 +70,6 @@ const DashboardPage = () => {
     )
   }
 
-  // Sleek, modern loader
   if (loading || !dashboardData) {
     return (
       <div className='h-full flex flex-col items-center justify-center space-y-6'>
@@ -114,6 +131,13 @@ const DashboardPage = () => {
     >
       <div className='flex justify-between items-center'>
         <h1 className='text-2xl font-bold text-white'>Master Overview</h1>
+        <button
+          onClick={handleDownloadReport}
+          className='flex items-center gap-2 px-4 py-2 bg-brand-glow text-slate-900 font-bold rounded-lg hover:bg-cyan-400 transition-colors shadow-[0_0_15px_rgba(0,240,255,0.4)]'
+        >
+          <DownloadCloud size={18} />
+          Export PDF
+        </button>
       </div>
 
       {/* ROW 1: Summary Metrics */}

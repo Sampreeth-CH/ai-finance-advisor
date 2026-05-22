@@ -27,6 +27,10 @@ import requests
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from app.core.database import Base, engine
+import io
+from fastapi.responses import StreamingResponse
+from fpdf import FPDF
+from datetime import timedelta
 
 print(settings.APP_NAME)
 
@@ -382,6 +386,145 @@ Respond directly to the User's last message: "{payload.message}". Keep it highly
     return {"reply": reply_text}
 
 
+# --- NEW: Time-Travel Predictive Forecasting Engine ---
+@app.get("/forecast/")
+async def get_forecast(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from datetime import timedelta
+    
+    raw_history = await get_user_transactions(db, current_user.id, limit=1000)
+    
+    if not raw_history:
+        return {"historical": [], "forecast": [], "warning": None, "current_balance": 0}
+
+    # Sort transactions chronologically
+    history_asc = sorted(raw_history, key=lambda x: x.date)
+    
+    historical_data = []
+    current_balance = 0.0
+    
+    # Calculate balance over time
+    for tx in history_asc:
+        current_balance += tx.amount
+        historical_data.append({
+            "date": tx.date.strftime("%b %d"), # e.g., "Oct 12"
+            "balance": round(current_balance, 2)
+        })
+        
+    # Predictive Math: Calculate daily burn/save rate
+    if len(history_asc) > 1:
+        days_active = (history_asc[-1].date - history_asc[0].date).days
+        days_active = max(1, days_active) # Prevent division by zero
+    else:
+        days_active = 1
+        
+    daily_drift = current_balance / days_active
+    
+    forecast_data = []
+    future_balance = current_balance
+    last_date = history_asc[-1].date
+    warning = None
+    
+    # Predict the next 90 days
+    for i in range(1, 91):
+        future_date = last_date + timedelta(days=i)
+        future_balance += daily_drift
+        
+        forecast_data.append({
+            "date": future_date.strftime("%b %d"),
+            "projected_balance": round(future_balance, 2)
+        })
+        
+        # Trigger an AI warning if they are going to hit ₹0
+        if future_balance < 0 and not warning:
+            warning = f"⚠️ Critical: At your current burn rate, you will run out of funds in {i} days."
+
+    # Return the last 30 days of history + 90 days of the future
+    return {
+        "historical": historical_data[-30:], 
+        "forecast": forecast_data,
+        "current_balance": round(current_balance, 2),
+        "daily_drift": round(daily_drift, 2),
+        "warning": warning
+    }
+
+
+# --- NEW: Subscription Sniper Engine ---
+@app.get("/subscriptions/")
+async def get_subscriptions(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    import pandas as pd
+    import re
+    
+    raw_history = await get_user_transactions(db, current_user.id, limit=500)
+    
+    if not raw_history:
+        return {"subscriptions": [], "total_monthly": 0, "yearly_drain": 0}
+
+    # Convert to DataFrame
+    data = [{"Description": tx.description, "Amount": tx.amount, "Date": tx.date} for tx in raw_history]
+    df = pd.DataFrame(data)
+    
+    # Filter only expenses (negative amounts)
+    expenses = df[df['Amount'] < 0].copy()
+    
+    if expenses.empty:
+        return {"subscriptions": [], "total_monthly": 0, "yearly_drain": 0}
+    
+    # Normalize descriptions (e.g., "Netflix Premium" -> "netflix")
+    # This strips out random numbers or IDs banks attach to transactions
+    def normalize_name(desc):
+        name = str(desc).lower()
+        name = re.sub(r'[^a-z\s]', '', name) # Keep only letters
+        # Grab the most prominent word (usually the company name)
+        words = name.split()
+        return words[0] if words else "unknown"
+
+    expenses['Normalized'] = expenses['Description'].apply(normalize_name)
+    
+    # Group by normalized name
+    grouped = expenses.groupby('Normalized').agg(
+        Count=('Amount', 'size'),
+        AvgAmount=('Amount', 'mean'),
+        LastDate=('Date', 'max'),
+        OriginalName=('Description', 'first')
+    ).reset_index()
+    
+    # Logic: If it happens 2+ times, we assume it's a recurring charge/subscription
+    subs_df = grouped[grouped['Count'] >= 2].copy()
+    
+    # Convert amounts to positive numbers for the UI
+    subs_df['AvgAmount'] = subs_df['AvgAmount'].abs()
+    
+    # Calculate totals
+    total_monthly = float(subs_df['AvgAmount'].sum())
+    yearly_drain = total_monthly * 12
+
+    # Format for frontend
+    subs_list = []
+    for _, row in subs_df.iterrows():
+        subs_list.append({
+            "id": row['Normalized'],
+            "name": row['OriginalName'].title(),
+            "monthly_cost": round(float(row['AvgAmount']), 2),
+            "yearly_cost": round(float(row['AvgAmount']) * 12, 2),
+            "last_paid": row['LastDate'].strftime("%b %d, %Y"),
+            "frequency": f"Detected {row['Count']} times"
+        })
+
+    # Sort by most expensive
+    subs_list = sorted(subs_list, key=lambda x: x['monthly_cost'], reverse=True)
+
+    return {
+        "subscriptions": subs_list,
+        "total_monthly": round(total_monthly, 2),
+        "yearly_drain": round(yearly_drain, 2)
+    }
+
 @app.get("/me")
 async def get_me(
     current_user: User = Depends(get_current_user)
@@ -396,6 +539,161 @@ async def get_me(
         "address": getattr(current_user, 'address', ''),
         "profile_pic": getattr(current_user, 'profile_pic', '')
     }
+
+# ==========================================
+# 1. UPCOMING BILLS PREDICTOR ENGINE
+# ==========================================
+@app.get("/upcoming-bills/")
+async def get_upcoming_bills(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    import pandas as pd
+    import re
+    
+    raw_history = await get_user_transactions(db, current_user.id, limit=1000)
+    if not raw_history:
+        return {"upcoming": [], "total_due": 0}
+
+    data = [{"Description": tx.description, "Amount": tx.amount, "Date": tx.date} for tx in raw_history]
+    df = pd.DataFrame(data)
+    expenses = df[df['Amount'] < 0].copy()
+    
+    if expenses.empty:
+        return {"upcoming": [], "total_due": 0}
+
+    def normalize_name(desc):
+        name = str(desc).lower()
+        name = re.sub(r'[^a-z\s]', '', name)
+        words = name.split()
+        return words[0] if words else "unknown"
+
+    expenses['Normalized'] = expenses['Description'].apply(normalize_name)
+    
+    # Find recurring expenses
+    grouped = expenses.groupby('Normalized').agg(
+        Count=('Amount', 'size'),
+        AvgAmount=('Amount', 'mean'),
+        LastDate=('Date', 'max'),
+        OriginalName=('Description', 'first')
+    ).reset_index()
+    
+    subs_df = grouped[grouped['Count'] >= 2].copy()
+    
+    upcoming_list = []
+    total_due = 0.0
+    
+    today = datetime.utcnow()
+    
+    for _, row in subs_df.iterrows():
+        # Predict the next bill date (assuming monthly, add 30 days to the last payment)
+        next_due_date = row['LastDate'] + timedelta(days=30)
+        
+        # Only show bills coming up in the next 30 days
+        days_until_due = (next_due_date - today).days
+        
+        if 0 <= days_until_due <= 30:
+            amt = round(abs(float(row['AvgAmount'])), 2)
+            upcoming_list.append({
+                "id": row['Normalized'],
+                "name": row['OriginalName'].title(),
+                "estimated_amount": amt,
+                "due_date": next_due_date.strftime("%b %d, %Y"),
+                "days_left": days_until_due
+            })
+            total_due += amt
+
+    # Sort by closest due date
+    upcoming_list = sorted(upcoming_list, key=lambda x: x['days_left'])
+
+    return {
+        "upcoming": upcoming_list,
+        "total_due": round(total_due, 2)
+    }
+
+# ==========================================
+# 2. PDF REPORT GENERATOR ENGINE
+# ==========================================
+class PDFReport(FPDF):
+    def header(self):
+        self.set_font("helvetica", "B", 18)
+        self.set_text_color(0, 51, 102)
+        self.cell(0, 10, "Executive Financial Report", border=False, align="C", new_x="LMARGIN", new_y="NEXT")
+        self.set_font("helvetica", "I", 10)
+        self.set_text_color(100, 100, 100)
+        self.cell(0, 10, f"Generated automatically by AI Finance on {datetime.utcnow().strftime('%B %d, %Y')}", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.ln(10)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("helvetica", "I", 8)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, f"Page {self.page_no()}", align="C")
+
+@app.get("/export/dashboard/")
+async def export_dashboard_pdf(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Gather data
+    raw_history = await get_user_transactions(db, current_user.id, limit=100)
+    score = calculate_finscore(raw_history)
+    
+    total_income = sum([tx.amount for tx in raw_history if tx.amount > 0])
+    total_expense = sum([abs(tx.amount) for tx in raw_history if tx.amount < 0])
+    net = total_income - total_expense
+
+    # Create PDF
+    pdf = PDFReport()
+    pdf.add_page()
+    
+    # User Info
+    pdf.set_font("helvetica", "B", 12)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(0, 10, f"Account Holder: {current_user.full_name or current_user.email}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 10, f"FinScore (Health Metric): {score} / 850", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(5)
+
+    # Financial Summary
+    pdf.set_font("helvetica", "B", 14)
+    pdf.set_fill_color(240, 240, 240)
+    pdf.cell(0, 10, " 30-Day Financial Overview", border=True, fill=True, new_x="LMARGIN", new_y="NEXT")
+    
+    pdf.set_font("helvetica", "", 12)
+    pdf.cell(100, 10, "Total Income:", border=1)
+    pdf.cell(0, 10, f"Rs. {round(total_income, 2)}", border=1, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(100, 10, "Total Expenses:", border=1)
+    pdf.cell(0, 10, f"Rs. {round(total_expense, 2)}", border=1, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(100, 10, "Net Allocation:", border=1)
+    pdf.cell(0, 10, f"Rs. {round(net, 2)}", border=1, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(10)
+
+    # Recent Transactions Table
+    pdf.set_font("helvetica", "B", 14)
+    pdf.cell(0, 10, " Recent Transactions Ledger", border=True, fill=True, new_x="LMARGIN", new_y="NEXT")
+    
+    pdf.set_font("helvetica", "B", 10)
+    pdf.cell(40, 8, "Date", border=1)
+    pdf.cell(100, 8, "Description", border=1)
+    pdf.cell(0, 8, "Amount", border=1, new_x="LMARGIN", new_y="NEXT")
+    
+    pdf.set_font("helvetica", "", 10)
+    for tx in raw_history[:15]: # Show last 15
+        pdf.cell(40, 8, tx.date.strftime("%Y-%m-%d"), border=1)
+        # Handle long descriptions safely
+        desc = (tx.description[:45] + '..') if len(tx.description) > 45 else tx.description
+        pdf.cell(100, 8, desc, border=1)
+        
+        amt_str = f"{'+' if tx.amount > 0 else '-'} Rs. {abs(tx.amount)}"
+        pdf.cell(0, 8, amt_str, border=1, new_x="LMARGIN", new_y="NEXT")
+
+    # Output to stream
+    pdf_bytes = pdf.output()
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes), 
+        media_type="application/pdf", 
+        headers={"Content-Disposition": "attachment; filename=Master_Report.pdf"}
+    )
 
 @app.put("/me")
 async def update_profile(

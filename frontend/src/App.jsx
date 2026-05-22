@@ -8,8 +8,10 @@ import SettingsPage from './pages/SettingsPage'
 import WealthPage from './pages/WealthPage'
 import SplitsPage from './pages/SplitsPage'
 import AdvisorPage from './pages/AdvisorPage'
-// --- NEW: Profile Page Import ---
 import ProfilePage from './pages/ProfilePage'
+import SubscriptionsPage from './pages/SubscriptionsPage'
+// --- NEW: Upcoming Bills Page Import ---
+import UpcomingBillsPage from './pages/UpcomingBillsPage'
 
 import DashboardLayout from './layouts/DashboardLayout'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -42,12 +44,13 @@ function App() {
           <Route index element={<Navigate to='/dashboard' replace />} />
           <Route path='dashboard' element={<DashboardPage />} />
           <Route path='transactions' element={<TransactionsPage />} />
+          <Route path='subscriptions' element={<SubscriptionsPage />} />
+          {/* --- NEW: Upcoming Bills Route --- */}
+          <Route path='upcoming' element={<UpcomingBillsPage />} />
           <Route path='wealth' element={<WealthPage />} />
           <Route path='splits' element={<SplitsPage />} />
           <Route path='advisor' element={<AdvisorPage />} />
-          {/* --- NEW: Profile Route --- */}
           <Route path='profile' element={<ProfilePage />} />
-
           <Route path='settings' element={<SettingsPage />} />
         </Route>
 
