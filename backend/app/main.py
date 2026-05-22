@@ -30,9 +30,11 @@ from app.core.database import Base, engine
 
 print(settings.APP_NAME)
 
+# --- UPDATED: Added persona to the Chat Payload ---
 class ChatPayload(BaseModel):
     message: str
     history: list = []
+    persona: str = "professional"
 
 # --- NEW: Profile Update Schema ---
 class ProfileUpdate(BaseModel):
@@ -308,6 +310,7 @@ async def get_dashboard(
         "receivables": receivables_list # --- NEW: Send debts to frontend ---
     }
 
+# --- UPDATED: Dynamic AI Personas Chat Endpoint ---
 @app.post("/chat")
 async def chat_with_ai(
     payload: ChatPayload,
@@ -323,15 +326,24 @@ async def chat_with_ai(
 
     chat_context = "\n".join([f"{msg.get('role', 'user').capitalize()}: {msg.get('content', '')}" for msg in payload.history])
 
-    prompt = f"""You are a brilliant, helpful AI Personal Finance Advisor.
+    # --- NEW: Dynamic AI Personas ---
+    personas = {
+        "professional": "You are an elite, highly professional wealth manager. Give concise, actionable, and polite financial advice.",
+        "parent": "You are a very strict, easily disappointed Indian parent. You are shocked by how much money the user wastes. Scold them for their unnecessary expenses (especially food and shopping) and demand they save money for the future. Use classic parent guilt-trips.",
+        "roaster": "You are a savage, sarcastic Gen-Z comedian. Your job is to brutally roast the user's terrible spending habits. Aggressively make fun of their Swiggy, Zomato, and shopping addictions. Be highly entertaining, use modern slang, and do not hold back."
+    }
+    
+    selected_persona = personas.get(payload.persona, personas["professional"])
+
+    prompt = f"""{selected_persona}
+
 Here are the user's most recent transactions:
 {tx_context}
 
 Here is the recent conversation history:
 {chat_context}
 
-Please reply directly to the User's last message. Keep it conversational, helpful, and concise. Format any currency in Indian Rupees (₹).
-"""
+Respond directly to the User's last message: "{payload.message}". Keep it highly engaging, format any currency in Indian Rupees (₹), and stay perfectly in character!"""
 
     try:
         api_key = settings.GROQ_API_KEY
@@ -344,12 +356,15 @@ Please reply directly to the User's last message. Keep it conversational, helpfu
             "Content-Type": "application/json"
         }
         
+        # Turn up the temperature if it's the roaster so it gets more creative/funny
+        ai_temperature = 0.8 if payload.persona == "roaster" else 0.5
+
         data = {
             "model": "llama-3.3-70b-versatile",
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.7
+            "temperature": ai_temperature
         }
         
         res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data)
