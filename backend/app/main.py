@@ -695,6 +695,77 @@ async def export_dashboard_pdf(
         headers={"Content-Disposition": "attachment; filename=Master_Report.pdf"}
     )
 
+# ==========================================
+# 3. ROUND-UP MICRO-INVESTING ENGINE
+# ==========================================
+@app.get("/roundups/")
+async def get_roundups(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    import math
+    
+    raw_history = await get_user_transactions(db, current_user.id, limit=1000)
+    expenses = [tx for tx in raw_history if tx.amount < 0]
+    
+    roundups_list = []
+    total_invested = 0.0
+    
+    # Calculate spare change for every expense
+    for tx in expenses:
+        amt = abs(float(tx.amount))
+        # Find the next multiple of 100
+        if amt % 100 != 0:
+            next_hundred = math.ceil(amt / 100.0) * 100
+            spare_change = next_hundred - amt
+            total_invested += spare_change
+            
+            roundups_list.append({
+                "date": tx.date.strftime("%b %d"),
+                "name": tx.description,
+                "original": amt,
+                "invested": round(spare_change, 2)
+            })
+
+    # Sort chronological for frontend
+    roundups_list = sorted(roundups_list, key=lambda x: x["date"], reverse=True)
+
+    # Calculate average monthly spare change
+    if len(expenses) > 1:
+        sorted_exp = sorted(expenses, key=lambda x: x.date)
+        days_active = (sorted_exp[-1].date - sorted_exp[0].date).days
+        days_active = max(1, days_active)
+        monthly_average = (total_invested / days_active) * 30
+    else:
+        monthly_average = total_invested
+
+    # Calculate 10-Year Compound Interest Projection (Assuming 12% Nifty 50 Return)
+    monthly_rate = 0.12 / 12
+    projection = []
+    
+    # Year 0 is today
+    projection.append({"year": "Today", "projected_wealth": round(total_invested, 2)})
+    
+    for year in range(1, 11):
+        months = year * 12
+        # Future Value of a Series formula
+        if monthly_average > 0:
+            fv = monthly_average * (((1 + monthly_rate)**months - 1) / monthly_rate) * (1 + monthly_rate)
+        else:
+            fv = 0
+            
+        projection.append({
+            "year": f"Year {year}",
+            "projected_wealth": round(fv, 2)
+        })
+
+    return {
+        "total_invested": round(total_invested, 2),
+        "monthly_average": round(monthly_average, 2),
+        "transactions": roundups_list,
+        "projection": projection
+    }
+
 @app.put("/me")
 async def update_profile(
     profile_data: ProfileUpdate,

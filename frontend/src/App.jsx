@@ -10,8 +10,9 @@ import SplitsPage from './pages/SplitsPage'
 import AdvisorPage from './pages/AdvisorPage'
 import ProfilePage from './pages/ProfilePage'
 import SubscriptionsPage from './pages/SubscriptionsPage'
-// --- NEW: Upcoming Bills Page Import ---
 import UpcomingBillsPage from './pages/UpcomingBillsPage'
+// --- NEW: Invest Page Import ---
+import InvestPage from './pages/InvestPage'
 
 import DashboardLayout from './layouts/DashboardLayout'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -45,8 +46,9 @@ function App() {
           <Route path='dashboard' element={<DashboardPage />} />
           <Route path='transactions' element={<TransactionsPage />} />
           <Route path='subscriptions' element={<SubscriptionsPage />} />
-          {/* --- NEW: Upcoming Bills Route --- */}
           <Route path='upcoming' element={<UpcomingBillsPage />} />
+          {/* --- NEW: Invest Route --- */}
+          <Route path='invest' element={<InvestPage />} />
           <Route path='wealth' element={<WealthPage />} />
           <Route path='splits' element={<SplitsPage />} />
           <Route path='advisor' element={<AdvisorPage />} />
