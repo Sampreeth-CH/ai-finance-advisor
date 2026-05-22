@@ -1,23 +1,35 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useAppStore } from '../store/appStore'
 import api from '../services/api'
-import { UploadCloud, Plus, FileText, Trash2 } from 'lucide-react'
+import {
+  UploadCloud,
+  Plus,
+  FileText,
+  Trash2,
+  ArrowUpRight,
+  ArrowDownRight,
+  Wallet,
+} from 'lucide-react'
 import { motion } from 'framer-motion'
 import ReceiptScanner from '../components/ReceiptScanner'
 
-// Add this helper function to format as Indian Rupees (INR)
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
-    minimumFractionDigits: 2,
+    minimumFractionDigits: 0,
   }).format(amount)
 }
 
 const TransactionsPage = () => {
-  const { transactions, fetchTransactions, loading } = useAppStore()
+  const {
+    transactions,
+    fetchTransactions,
+    loading,
+    dashboardData,
+    fetchDashboard,
+  } = useAppStore()
   const [isUploading, setIsUploading] = useState(false)
-  // --- NEW: Added splitWith to the default state ---
   const [manualEntries, setManualEntries] = useState([
     { description: '', amount: '', splitWith: '' },
   ])
@@ -26,7 +38,8 @@ const TransactionsPage = () => {
 
   useEffect(() => {
     fetchTransactions()
-  }, [fetchTransactions])
+    fetchDashboard()
+  }, [fetchTransactions, fetchDashboard])
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0]
@@ -41,9 +54,10 @@ const TransactionsPage = () => {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       await fetchTransactions()
+      await fetchDashboard()
     } catch (error) {
-      console.error('Failed to upload file', error)
-      alert('File upload failed. Please check the format.')
+      console.error('Failed to upload', error)
+      alert('File upload failed.')
     } finally {
       setIsUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -51,7 +65,6 @@ const TransactionsPage = () => {
   }
 
   const handleManualAdd = () => {
-    // --- NEW: Included splitWith in the new row generator ---
     setManualEntries([
       ...manualEntries,
       { description: '', amount: '', splitWith: '' },
@@ -70,7 +83,6 @@ const TransactionsPage = () => {
     setManualEntries(newEntries)
   }
 
-  // Handle the result from the OCR Scanner
   const handleScanComplete = (amount) => {
     if (amount) {
       const updatedEntries = [...manualEntries]
@@ -82,17 +94,17 @@ const TransactionsPage = () => {
         updatedEntries[emptyIndex] = {
           description: 'Scanned Receipt',
           amount: amount,
-          splitWith: '', // --- NEW: Added fallback for OCR
+          splitWith: '',
         }
         setManualEntries(updatedEntries)
       } else {
         setManualEntries([
           ...updatedEntries,
-          { description: 'Scanned Receipt', amount: amount, splitWith: '' }, // --- NEW: Added fallback for OCR
+          { description: 'Scanned Receipt', amount: amount, splitWith: '' },
         ])
       }
     } else {
-      alert("Couldn't find a clear total amount. Please enter it manually.")
+      alert("Couldn't find a clear total amount.")
     }
   }
 
@@ -104,7 +116,7 @@ const TransactionsPage = () => {
       .map((entry) => ({
         Description: entry.description,
         Amount: parseFloat(entry.amount),
-        SplitWith: entry.splitWith || '', // --- NEW: Map state to the API payload
+        SplitWith: entry.splitWith || '',
       }))
 
     if (validEntries.length === 0) return
@@ -112,50 +124,83 @@ const TransactionsPage = () => {
     setIsSubmittingManual(true)
     try {
       await api.post('/manual/', validEntries)
-      // --- NEW: Reset state with splitWith included ---
       setManualEntries([{ description: '', amount: '', splitWith: '' }])
       await fetchTransactions()
+      await fetchDashboard()
     } catch (error) {
-      console.error('Failed to submit manual transactions', error)
+      console.error('Failed to submit', error)
       alert('Failed to submit transactions.')
     } finally {
       setIsSubmittingManual(false)
     }
   }
 
-  // Clear History Function
   const handleClearHistory = async () => {
     const isConfirmed = window.confirm(
       'Are you sure you want to delete ALL your transactions? This cannot be undone.',
     )
-
     if (isConfirmed) {
       try {
         await api.delete('/clear/')
         await fetchTransactions()
+        await fetchDashboard()
       } catch (error) {
-        console.error('Failed to clear history', error)
-        alert('Failed to clear history. Please try again.')
+        console.error('Failed to clear', error)
       }
     }
   }
+
+  const analysis = dashboardData?.analysis || {}
+  const totalIncome = analysis.total_income || 0
+  const totalExpense = analysis.total_expense || 0
+  const netAllocation = analysis.net_allocation || 0
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className='space-y-6 h-full flex flex-col'
+      // FIX 1: Removed `h-full flex flex-col`. Let the page scroll naturally!
+      className='space-y-6 pb-8'
     >
       <div className='flex justify-between items-center'>
-        <h1 className='text-2xl font-bold text-white'>Transactions</h1>
-
+        <h1 className='text-2xl font-bold text-white'>Ledger</h1>
         <button
           onClick={handleClearHistory}
           className='flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border border-red-500/20 rounded-lg transition-colors text-sm font-medium'
         >
           <Trash2 size={16} />
-          Reset History
+          Reset Ledger
         </button>
+      </div>
+
+      {/* FIX 2: Made the Live Pulse Banner responsive (grid-cols-1 on mobile, md:grid-cols-3 on desktop) */}
+      <div className='grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-900/50 border border-slate-800 rounded-2xl p-4'>
+        <div className='flex flex-col border-b md:border-b-0 md:border-r border-slate-800 px-4 pb-4 md:pb-0'>
+          <span className='text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1'>
+            Total Income
+          </span>
+          <span className='text-xl font-bold text-emerald-400 flex items-center gap-1'>
+            <ArrowUpRight size={18} /> ₹{totalIncome.toLocaleString()}
+          </span>
+        </div>
+        <div className='flex flex-col border-b md:border-b-0 md:border-r border-slate-800 px-4 py-4 md:py-0'>
+          <span className='text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1'>
+            Total Spent
+          </span>
+          <span className='text-xl font-bold text-red-400 flex items-center gap-1'>
+            <ArrowDownRight size={18} /> ₹{totalExpense.toLocaleString()}
+          </span>
+        </div>
+        <div className='flex flex-col px-4 pt-4 md:pt-0'>
+          <span className='text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1'>
+            Net Balance
+          </span>
+          <span
+            className={`text-xl font-bold flex items-center gap-2 ${netAllocation >= 0 ? 'text-brand-glow' : 'text-rose-400'}`}
+          >
+            <Wallet size={18} /> ₹{netAllocation.toLocaleString()}
+          </span>
+        </div>
       </div>
 
       <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
@@ -204,7 +249,6 @@ const TransactionsPage = () => {
             </button>
           </div>
 
-          {/* The Receipt Scanner Component */}
           <div className='mb-6'>
             <ReceiptScanner onScanComplete={handleScanComplete} />
           </div>
@@ -222,7 +266,7 @@ const TransactionsPage = () => {
                   onChange={(e) =>
                     handleManualChange(index, 'description', e.target.value)
                   }
-                  className='glass-input flex-1 min-w-[200px]'
+                  className='glass-input flex-1 min-w-[150px]'
                   required
                 />
                 <input
@@ -236,8 +280,6 @@ const TransactionsPage = () => {
                   className='glass-input w-full md:w-32'
                   required
                 />
-
-                {/* --- NEW: The Split With Input Box --- */}
                 <input
                   type='text'
                   placeholder='Split With (Optional)'
@@ -247,7 +289,6 @@ const TransactionsPage = () => {
                   }
                   className='glass-input w-full md:w-48 text-blue-400 placeholder:text-blue-500/50'
                 />
-
                 {manualEntries.length > 1 && (
                   <button
                     type='button'
@@ -272,14 +313,16 @@ const TransactionsPage = () => {
         </div>
       </div>
 
-      {/* Transactions Table */}
-      <div className='glass-panel flex-1 flex flex-col min-h-0 overflow-hidden'>
+      {/* FIX 3: Removed `flex-1 min-h-0 overflow-hidden` from the table wrapper. The page dictates the scroll now. */}
+      <div className='glass-panel'>
         <div className='p-4 border-b border-slate-800/60 bg-slate-900/40'>
           <h3 className='text-lg font-medium text-white flex items-center gap-2'>
             <FileText size={18} className='text-brand-glow' /> Recent Activity
           </h3>
         </div>
-        <div className='flex-1 overflow-y-auto p-0'>
+
+        {/* FIX 4: `overflow-x-auto` allows horizontal scrolling for the table on tiny phones without breaking the vertical page scroll */}
+        <div className='overflow-x-auto p-0'>
           {loading ? (
             <div className='flex items-center justify-center h-32'>
               <div className='w-8 h-8 border-4 border-brand-glow border-t-transparent rounded-full animate-spin' />
@@ -289,7 +332,7 @@ const TransactionsPage = () => {
               No transactions found. Upload a file or add manually.
             </div>
           ) : (
-            <table className='w-full text-left border-collapse'>
+            <table className='w-full text-left border-collapse min-w-[600px]'>
               <thead className='bg-slate-900/60 sticky top-0'>
                 <tr>
                   <th className='px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider'>
