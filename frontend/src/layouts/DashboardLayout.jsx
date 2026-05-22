@@ -13,7 +13,8 @@ import {
   Bot,
   User,
   Repeat,
-  CalendarClock, // --- NEW: Imported CalendarClock icon
+  CalendarClock,
+  PiggyBank, // --- NEW: Imported PiggyBank icon
 } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import FloatingAssistant from '../features/ai-chat/FloatingAssistant'
@@ -44,11 +45,16 @@ const DashboardLayout = () => {
       icon: <Repeat size={20} />,
       label: 'Subscriptions',
     },
-    // --- NEW: Upcoming Bills Menu Item ---
     {
       path: '/upcoming',
       icon: <CalendarClock size={20} />,
       label: 'Upcoming Bills',
+    },
+    // --- NEW: Micro-Invest Menu Item ---
+    {
+      path: '/invest',
+      icon: <PiggyBank size={20} />,
+      label: 'Micro-Invest',
     },
     { path: '/wealth', icon: <PieChart size={20} />, label: 'Wealth & Score' },
     { path: '/splits', icon: <Users size={20} />, label: 'Shared Wallets' },
