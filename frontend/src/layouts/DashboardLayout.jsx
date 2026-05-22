@@ -11,7 +11,9 @@ import {
   PieChart,
   Users,
   Bot,
-  User, // --- NEW: Imported User icon
+  User,
+  Repeat,
+  CalendarClock, // --- NEW: Imported CalendarClock icon
 } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import FloatingAssistant from '../features/ai-chat/FloatingAssistant'
@@ -26,7 +28,6 @@ const DashboardLayout = () => {
     navigate('/login')
   }
 
-  // --- ADDED PROFILE TO NAVIGATION MENU ---
   const navItems = [
     {
       path: '/dashboard',
@@ -38,10 +39,21 @@ const DashboardLayout = () => {
       icon: <Receipt size={20} />,
       label: 'Transactions',
     },
+    {
+      path: '/subscriptions',
+      icon: <Repeat size={20} />,
+      label: 'Subscriptions',
+    },
+    // --- NEW: Upcoming Bills Menu Item ---
+    {
+      path: '/upcoming',
+      icon: <CalendarClock size={20} />,
+      label: 'Upcoming Bills',
+    },
     { path: '/wealth', icon: <PieChart size={20} />, label: 'Wealth & Score' },
     { path: '/splits', icon: <Users size={20} />, label: 'Shared Wallets' },
     { path: '/advisor', icon: <Bot size={20} />, label: 'AI Copilot' },
-    { path: '/profile', icon: <User size={20} />, label: 'My Profile' }, // NEW
+    { path: '/profile', icon: <User size={20} />, label: 'My Profile' },
     { path: '/settings', icon: <Settings size={20} />, label: 'Settings' },
   ]
 
