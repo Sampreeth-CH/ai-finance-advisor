@@ -34,6 +34,15 @@ class ChatPayload(BaseModel):
     message: str
     history: list = []
 
+# --- NEW: Profile Update Schema ---
+class ProfileUpdate(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    mobile_no: str | None = None
+    place: str | None = None
+    address: str | None = None
+    profile_pic: str | None = None
+
 # --- NEW: FinScore Calculation Algorithm ---
 def calculate_finscore(transactions_list):
     """Calculates a proprietary FinScore (300 to 850) based on financial behavior."""
@@ -364,6 +373,35 @@ async def get_me(
 ):
     return {
         "id": current_user.id,
-        "name": current_user.full_name,
-        "email": current_user.email
+        "email": current_user.email,
+        "first_name": getattr(current_user, 'first_name', ''),
+        "last_name": getattr(current_user, 'last_name', ''),
+        "mobile_no": getattr(current_user, 'mobile_no', ''),
+        "place": getattr(current_user, 'place', ''),
+        "address": getattr(current_user, 'address', ''),
+        "profile_pic": getattr(current_user, 'profile_pic', '')
     }
+
+@app.put("/me")
+async def update_profile(
+    profile_data: ProfileUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        # Update the user record with the new data safely
+        if profile_data.first_name is not None: current_user.first_name = profile_data.first_name
+        if profile_data.last_name is not None: current_user.last_name = profile_data.last_name
+        if profile_data.mobile_no is not None: current_user.mobile_no = profile_data.mobile_no
+        if profile_data.place is not None: current_user.place = profile_data.place
+        if profile_data.address is not None: current_user.address = profile_data.address
+        if profile_data.profile_pic is not None: current_user.profile_pic = profile_data.profile_pic
+
+        db.add(current_user)
+        await db.commit()
+        await db.refresh(current_user)
+
+        return {"message": "Profile updated successfully"}
+    except Exception as e:
+        await db.rollback()
+        return {"error": str(e)}
