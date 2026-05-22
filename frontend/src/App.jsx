@@ -5,11 +5,15 @@ import SignupPage from './pages/SignupPage'
 import DashboardPage from './pages/DashboardPage'
 import TransactionsPage from './pages/TransactionsPage'
 import SettingsPage from './pages/SettingsPage'
+import WealthPage from './pages/WealthPage'
+import SplitsPage from './pages/SplitsPage'
+import AdvisorPage from './pages/AdvisorPage'
+// --- NEW: Profile Page Import ---
+import ProfilePage from './pages/ProfilePage'
+
 import DashboardLayout from './layouts/DashboardLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 import { useAppStore } from './store/appStore'
-
-// --- NEW: Import the Voice Chat Bot ---
 import VoiceChatBot from './components/VoiceChatBot'
 
 function App() {
@@ -38,15 +42,18 @@ function App() {
           <Route index element={<Navigate to='/dashboard' replace />} />
           <Route path='dashboard' element={<DashboardPage />} />
           <Route path='transactions' element={<TransactionsPage />} />
+          <Route path='wealth' element={<WealthPage />} />
+          <Route path='splits' element={<SplitsPage />} />
+          <Route path='advisor' element={<AdvisorPage />} />
+          {/* --- NEW: Profile Route --- */}
+          <Route path='profile' element={<ProfilePage />} />
+
           <Route path='settings' element={<SettingsPage />} />
         </Route>
 
         <Route path='*' element={<Navigate to='/' replace />} />
       </Routes>
 
-      {/* --- NEW: The Floating AI Assistant --- */}
-      {/* It sits outside the Routes so it persists across pages, 
-          but ONLY renders if the user is logged in (token exists) */}
       {token && <VoiceChatBot />}
     </BrowserRouter>
   )

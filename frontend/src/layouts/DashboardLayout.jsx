@@ -8,6 +8,10 @@ import {
   Wallet,
   Menu,
   X,
+  PieChart,
+  Users,
+  Bot,
+  User, // --- NEW: Imported User icon
 } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import FloatingAssistant from '../features/ai-chat/FloatingAssistant'
@@ -15,7 +19,6 @@ import FloatingAssistant from '../features/ai-chat/FloatingAssistant'
 const DashboardLayout = () => {
   const logout = useAppStore((state) => state.logout)
   const navigate = useNavigate()
-  // --- NEW: State to handle mobile sidebar toggle ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   const handleLogout = () => {
@@ -23,32 +26,34 @@ const DashboardLayout = () => {
     navigate('/login')
   }
 
+  // --- ADDED PROFILE TO NAVIGATION MENU ---
   const navItems = [
     {
       path: '/dashboard',
       icon: <LayoutDashboard size={20} />,
-      label: 'Dashboard',
+      label: 'Overview',
     },
     {
       path: '/transactions',
       icon: <Receipt size={20} />,
       label: 'Transactions',
     },
+    { path: '/wealth', icon: <PieChart size={20} />, label: 'Wealth & Score' },
+    { path: '/splits', icon: <Users size={20} />, label: 'Shared Wallets' },
+    { path: '/advisor', icon: <Bot size={20} />, label: 'AI Copilot' },
+    { path: '/profile', icon: <User size={20} />, label: 'My Profile' }, // NEW
     { path: '/settings', icon: <Settings size={20} />, label: 'Settings' },
   ]
 
-  // Close sidebar when clicking a link on mobile
   const handleNavClick = () => {
     setIsSidebarOpen(false)
   }
 
   return (
     <div className='flex h-screen bg-slate-950 text-slate-100 overflow-hidden relative'>
-      {/* Background glow effects */}
       <div className='absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-brand-glow/10 blur-[120px] pointer-events-none z-0' />
       <div className='absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[120px] pointer-events-none z-0' />
 
-      {/* --- NEW: Mobile Sidebar Dark Overlay --- */}
       {isSidebarOpen && (
         <div
           className='fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 lg:hidden'
@@ -56,7 +61,6 @@ const DashboardLayout = () => {
         />
       )}
 
-      {/* Sidebar - Now slides out on mobile, stays fixed on desktop */}
       <aside
         className={`fixed lg:relative inset-y-0 left-0 z-50 w-64 glass-panel m-0 lg:m-4 flex flex-col justify-between transition-transform duration-300 ease-in-out ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
@@ -72,7 +76,6 @@ const DashboardLayout = () => {
                 AI Finance
               </h1>
             </div>
-            {/* --- NEW: Mobile Close Button inside sidebar --- */}
             <button
               className='lg:hidden text-slate-400 hover:text-white transition-colors'
               onClick={() => setIsSidebarOpen(false)}
@@ -81,7 +84,7 @@ const DashboardLayout = () => {
             </button>
           </div>
 
-          <nav className='p-4 space-y-2'>
+          <nav className='p-4 space-y-2 overflow-y-auto max-h-[calc(100vh-200px)]'>
             {navItems.map((item) => (
               <NavLink
                 key={item.path}
@@ -112,13 +115,11 @@ const DashboardLayout = () => {
         </div>
       </aside>
 
-      {/* Main Content Wrapper */}
       <div className='flex-1 flex flex-col h-screen min-w-0 z-10'>
-        {/* --- NEW: Mobile Header with Hamburger Menu --- */}
         <header className='lg:hidden flex items-center justify-between p-4 glass-panel m-4 mb-0'>
           <div className='flex items-center gap-3'>
             <Wallet className='text-brand-glow' size={24} />
-            <h1 className='text-lg font-bold text-white'>Dashboard</h1>
+            <h1 className='text-lg font-bold text-white'>Menu</h1>
           </div>
           <button
             onClick={() => setIsSidebarOpen(true)}
@@ -128,8 +129,6 @@ const DashboardLayout = () => {
           </button>
         </header>
 
-        {/* --- FIX: Main Content Area is now fully scrollable! --- */}
-        {/* pb-32 adds padding to the bottom so the floating assistant doesn't block content */}
         <main className='flex-1 overflow-y-auto p-4 md:p-6 pb-32 scroll-smooth'>
           <Outlet />
         </main>

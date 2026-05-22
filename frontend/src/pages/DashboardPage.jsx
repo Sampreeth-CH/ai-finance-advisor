@@ -22,8 +22,8 @@ import ReactMarkdown from 'react-markdown'
 
 import WealthSimulator from '../components/WealthSimulator'
 import FinScoreCard from '../components/FinScoreCard'
-// --- NEW: Import the Shared Wallets Component ---
 import ReceivablesWidget from '../components/ReceivablesWidget'
+import { Link } from 'react-router-dom'
 
 const DashboardPage = () => {
   const {
@@ -40,7 +40,6 @@ const DashboardPage = () => {
     fetchTransactions()
   }, [fetchDashboard, fetchTransactions])
 
-  // SAFETY FIX 1: Handle errors gracefully so it doesn't spin forever
   if (error && !dashboardData) {
     return (
       <div className='h-full flex flex-col items-center justify-center text-center space-y-4'>
@@ -53,52 +52,54 @@ const DashboardPage = () => {
     )
   }
 
-  // SAFETY FIX 2: Explain to the user why the loading takes so long!
+  // Sleek, modern loader
   if (loading || !dashboardData) {
     return (
       <div className='h-full flex flex-col items-center justify-center space-y-6'>
-        <div className='w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(6,182,212,0.5)]' />
+        <div className='relative flex items-center justify-center'>
+          <div className='w-16 h-16 border-4 border-slate-800 rounded-full'></div>
+          <div className='w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin absolute shadow-[0_0_15px_rgba(6,182,212,0.5)]'></div>
+          <Sparkles
+            className='absolute text-cyan-400 animate-pulse'
+            size={20}
+          />
+        </div>
         <div className='text-center'>
-          <p className='text-slate-300 font-medium animate-pulse text-lg'>
-            AI is analyzing your finances...
+          <p className='text-slate-200 font-medium animate-pulse text-lg tracking-wide'>
+            Syncing Financial Data...
           </p>
-          <p className='text-slate-500 text-sm mt-2 max-w-sm'>
-            (Your local Llama 3 model is reading your history and generating a
-            personalized report. This may take 15-30 seconds.)
+          <p className='text-slate-500 text-sm mt-2'>
+            AI is compiling your latest insights.
           </p>
         </div>
       </div>
     )
   }
 
-  // --- NEW: Extract fin_score AND receivables from the backend data ---
   const { analysis, ai_advisor, fin_score, receivables } = dashboardData
-  const userScore = fin_score || 650 // Default fallback while calculating
+  const userScore = fin_score || 650
 
-  // SAFETY FIX 3: Force Pandas data into safe JavaScript structures
   const chartData =
     analysis && analysis.category_spending
       ? Object.entries(analysis.category_spending).map(([name, amount]) => ({
           name: String(name),
-          amount: Number(amount) || 0, // Forces it to be a valid number
+          amount: Number(amount) || 0,
         }))
       : []
 
   const StatCard = ({ title, amount, icon, isPositive }) => {
-    // SAFETY FIX 4: Prevent React .toFixed() crashes by guaranteeing a number type
     const safeAmount = Number(amount) || 0
-
     return (
-      <div className='glass-panel p-6 flex items-center gap-4'>
+      <div className='glass-panel p-5 flex items-center gap-4 hover:border-brand-glow/30 transition-colors'>
         <div
-          className={`p-4 rounded-xl ${isPositive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'} shadow-lg`}
+          className={`p-3 rounded-xl ${isPositive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'} shadow-lg`}
         >
           {icon}
         </div>
         <div>
           <h3 className='text-sm font-medium text-slate-400'>{title}</h3>
           <p className='text-2xl font-bold text-slate-100'>
-            ₹{safeAmount.toFixed(2)}
+            ₹{safeAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </p>
         </div>
       </div>
@@ -109,21 +110,13 @@ const DashboardPage = () => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className='space-y-6 h-full flex flex-col'
+      className='space-y-6 pb-8'
     >
       <div className='flex justify-between items-center'>
-        <h1 className='text-2xl font-bold text-white'>Financial Overview</h1>
+        <h1 className='text-2xl font-bold text-white'>Master Overview</h1>
       </div>
 
-      {/* --- The Wealth Simulator Component --- */}
-      {transactions && transactions.length > 0 && (
-        <WealthSimulator transactions={transactions} />
-      )}
-
-      {/* --- The FinScore Gamification Component --- */}
-      <FinScoreCard score={userScore} />
-
-      {/* Summary Cards */}
+      {/* ROW 1: Summary Metrics */}
       <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
         <StatCard
           title='Total Income'
@@ -145,19 +138,27 @@ const DashboardPage = () => {
         />
       </div>
 
-      {/* Main Content Area */}
+      {/* ROW 2: Chart (Left) + FinScore (Right) */}
       <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
         {/* Chart Area */}
-        <div className='lg:col-span-2 glass-panel p-6 flex flex-col'>
-          <h2 className='text-lg font-semibold text-white mb-6'>
-            Spending by Category
-          </h2>
-          <div className='flex-1 min-h-[300px]'>
+        <div className='lg:col-span-2 glass-panel p-6 flex flex-col h-[400px]'>
+          <div className='flex justify-between items-center mb-6'>
+            <h2 className='text-lg font-semibold text-white'>
+              Spending by Category
+            </h2>
+            <Link
+              to='/transactions'
+              className='text-xs text-brand-glow hover:underline'
+            >
+              View All →
+            </Link>
+          </div>
+          <div className='flex-1 min-h-0 w-full'>
             {chartData.length > 0 ? (
               <ResponsiveContainer width='100%' height='100%'>
                 <BarChart
                   data={chartData}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
                 >
                   <CartesianGrid
                     strokeDasharray='3 3'
@@ -206,26 +207,52 @@ const DashboardPage = () => {
           </div>
         </div>
 
-        {/* --- NEW: The Shared Wallets Widget --- */}
-        <div className='lg:col-span-1 h-[400px] lg:h-auto'>
+        {/* Gamification Area */}
+        <div className='lg:col-span-1 h-[400px]'>
+          <FinScoreCard score={userScore} />
+        </div>
+      </div>
+
+      {/* ROW 3: Wealth Simulator (Left) + Shared Wallets (Right) */}
+      <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+        {/* Wealth Simulator */}
+        <div className='lg:col-span-2 flex flex-col h-full'>
+          {transactions && transactions.length > 0 ? (
+            <div className='h-full'>
+              <WealthSimulator transactions={transactions} />
+            </div>
+          ) : (
+            <div className='glass-panel p-6 flex flex-col items-center justify-center h-full text-slate-500'>
+              <p>Add transactions to unlock the Wealth Simulator.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Shared Wallets */}
+        <div className='lg:col-span-1 h-[350px] lg:h-auto'>
           <ReceivablesWidget receivables={receivables} />
         </div>
       </div>
 
-      {/* AI Insights Area */}
+      {/* ROW 4: AI Insights Brief */}
       <div className='glass-panel p-6 flex flex-col border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.05)] relative overflow-hidden'>
         <div className='absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 blur-[50px] pointer-events-none rounded-full' />
 
-        <div className='flex items-center gap-3 mb-6'>
-          <div className='p-2 bg-cyan-500/20 rounded-lg'>
-            <Sparkles className='text-cyan-400 w-5 h-5' />
+        <div className='flex items-center justify-between mb-4 relative z-10'>
+          <div className='flex items-center gap-3'>
+            <div className='p-2 bg-cyan-500/20 rounded-lg'>
+              <Sparkles className='text-cyan-400 w-5 h-5' />
+            </div>
+            <h2 className='text-lg font-semibold text-white'>
+              AI Copilot Summary
+            </h2>
           </div>
-          <h2 className='text-lg font-semibold text-white'>
-            AI Advisor Insights
-          </h2>
+          <Link to='/advisor' className='text-xs text-cyan-400 hover:underline'>
+            Deep Dive →
+          </Link>
         </div>
 
-        <div className='flex-1 overflow-y-auto pr-2'>
+        <div className='max-h-[250px] overflow-y-auto pr-2 relative z-10'>
           {ai_advisor ? (
             <div className='text-slate-300 leading-relaxed text-sm'>
               <ReactMarkdown
