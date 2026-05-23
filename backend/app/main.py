@@ -31,6 +31,7 @@ import io
 from fastapi.responses import StreamingResponse
 from fpdf import FPDF
 from datetime import timedelta
+from app.services.ml_model import predict_transaction
 
 print(settings.APP_NAME)
 
@@ -121,7 +122,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.get("/")
 def home():
-    return {"message": "AI Finance Advisor Backend Running 🚀"}
+    return {"message": "AI Finance Advisor Backend Running"}
 
 @app.post("/upload/")
 async def upload_file(
@@ -129,6 +130,9 @@ async def upload_file(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    import pandas as pd
+    from app.services.ml_model import predict_transaction # Import the new ML function
+    
     file_path = os.path.join(UPLOAD_DIR, file.filename)
 
     with open(file_path, "wb") as buffer:
@@ -142,19 +146,30 @@ async def upload_file(
         else:
             return {"error": "Unsupported file format"}
 
-        df["Category"] = df["Description"].apply(predict_category)
+        # --- NEW: Process uploaded files line-by-line with the AI ---
+        for index, row in df.iterrows():
+            raw_amount = float(row["Amount"])
+            raw_desc = str(row["Description"])
+            
+            # Let the ML Model decide category AND if it's negative or positive
+            predicted_category, smart_amount = predict_transaction(raw_desc, raw_amount)
 
-        for _, row in df.iterrows():
             new_tx = Transaction(
-                amount=float(row["Amount"]), 
-                description=str(row["Description"]),
-                category=str(row["Category"]),
+                amount=smart_amount, # Now automatically signed!
+                description=raw_desc,
+                category=predicted_category, # ML predicted category
                 date=datetime.utcnow(), 
                 user_id=current_user.id
             )
             db.add(new_tx)
+            
+            # Update the DataFrame live so the analyzer gets the corrected data
+            df.at[index, "Amount"] = smart_amount
+            df.at[index, "Category"] = predicted_category
         
         await db.commit()
+        
+        # Analyze using the perfectly categorized and signed data
         analysis = analyze_finances(df)
         insights = generate_ai_insights_llm(analysis)
 
@@ -175,38 +190,51 @@ async def manual_entry(
     current_user: User = Depends(get_current_user)
 ):
     import pandas as pd
+    from app.services.ml_model import predict_transaction # Importing the new ML function
+    
     df = pd.DataFrame(data)
 
-    df["Category"] = df["Description"].apply(categorize_transaction)
+    # We remove the old df["Category"] = ... line because the new ML model 
+    # needs to evaluate the description and amount row by row.
 
-    for _, row in df.iterrows():
-        # --- NEW: Split Calculation Logic ---
-        original_amount = float(row["Amount"])
+    for index, row in df.iterrows():
+        raw_amount = float(row["Amount"])
+        raw_desc = str(row["Description"])
         
+        # --- NEW: Let the ML Model decide category AND if it's negative or positive! ---
+        predicted_category, smart_amount = predict_transaction(raw_desc, raw_amount)
+
         # Safely extract 'SplitWith' (Handles missing keys or Pandas NaN values)
         raw_split = row.get("SplitWith", "")
         split_person = str(raw_split).strip() if pd.notna(raw_split) else ""
         
-        final_expense = original_amount
+        final_expense = smart_amount
         split_debt = 0.0
         
         # If the user tagged a friend, cut the expense in half and log the debt
-        if split_person and split_person.lower() != "nan" and original_amount < 0: 
-            final_expense = original_amount / 2.0
+        # (It checks smart_amount < 0 because the ML automatically made expenses negative)
+        if split_person and split_person.lower() != "nan" and smart_amount < 0: 
+            final_expense = smart_amount / 2.0
             split_debt = abs(final_expense) # The friend owes positive money back
 
         new_tx = Transaction(
-            amount=final_expense, # Log only the user's portion
-            description=str(row["Description"]),
-            category=str(row["Category"]),
+            amount=final_expense, # Log only the user's portion (now automatically signed!)
+            description=raw_desc,
+            category=predicted_category, # Use the ML predicted category
             date=datetime.utcnow(),
             user_id=current_user.id,
             split_with=split_person if split_person and split_person.lower() != "nan" else None,
             split_amount=split_debt if split_person and split_person.lower() != "nan" else None
         )
         db.add(new_tx)
+        
+        # Update the DataFrame row so the analyzer below gets the correct data
+        df.at[index, "Amount"] = final_expense
+        df.at[index, "Category"] = predicted_category
     
     await db.commit()
+    
+    # Analyze finances with the newly smart-categorized and signed dataframe
     analysis = analyze_finances(df)
 
     raw_history = await get_user_transactions(db, current_user.id, limit=30)
