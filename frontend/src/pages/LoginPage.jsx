@@ -1,15 +1,21 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAppStore } from '../store/appStore'
-import { motion } from 'framer-motion'
-import { Wallet, LogIn } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Wallet, LogIn, AlertCircle } from 'lucide-react'
 
 const LoginPage = () => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const login = useAppStore((state) => state.login)
-  const { loading, error } = useAppStore()
   const navigate = useNavigate()
+
+  // Pull all needed states and actions from the store
+  const { login, loading, error, clearError } = useAppStore()
+
+  // Clear any existing errors when the page first loads
+  useEffect(() => {
+    clearError()
+  }, [clearError])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -17,6 +23,12 @@ const LoginPage = () => {
     if (success) {
       navigate('/dashboard')
     }
+  }
+
+  // Clear the error as soon as the user starts typing to fix their mistake
+  const handleInputChange = (setter) => (e) => {
+    if (error) clearError()
+    setter(e.target.value)
   }
 
   return (
@@ -41,11 +53,20 @@ const LoginPage = () => {
           </p>
         </div>
 
-        {error && (
-          <div className='bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg mb-6 text-sm'>
-            {error}
-          </div>
-        )}
+        {/* Smoothly animated error banner */}
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, height: 0, mb: 0 }}
+              animate={{ opacity: 1, height: 'auto', mb: 24 }}
+              exit={{ opacity: 0, height: 0, mb: 0 }}
+              className='bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm flex items-start gap-3 overflow-hidden'
+            >
+              <AlertCircle size={18} className='shrink-0 mt-0.5' />
+              <span>{error}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <form onSubmit={handleSubmit} className='space-y-4'>
           <div>
@@ -55,10 +76,11 @@ const LoginPage = () => {
             <input
               type='text'
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className='glass-input w-full'
+              onChange={handleInputChange(setUsername)}
+              className='glass-input w-full focus:border-brand-glow/50 focus:ring-1 focus:ring-brand-glow/50 transition-all outline-none'
               placeholder='you@example.com'
               required
+              disabled={loading}
             />
           </div>
           <div>
@@ -68,17 +90,18 @@ const LoginPage = () => {
             <input
               type='password'
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className='glass-input w-full'
+              onChange={handleInputChange(setPassword)}
+              className='glass-input w-full focus:border-brand-glow/50 focus:ring-1 focus:ring-brand-glow/50 transition-all outline-none'
               placeholder='••••••••'
               required
+              disabled={loading}
             />
           </div>
 
           <button
             type='submit'
             disabled={loading}
-            className='w-full glass-button mt-6 flex justify-center items-center gap-2'
+            className='w-full glass-button mt-6 flex justify-center items-center gap-2 disabled:opacity-70'
           >
             {loading ? (
               <div className='w-5 h-5 border-2 border-brand-glow border-t-transparent rounded-full animate-spin' />

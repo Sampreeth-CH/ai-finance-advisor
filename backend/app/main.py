@@ -280,15 +280,15 @@ async def get_dashboard(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # 1. Fetch DB data instantly
     raw_history = await get_user_transactions(db, current_user.id, limit=100)
 
     if not raw_history:
         return {
             "message": f"Welcome, {current_user.email}! You have no transactions yet. Upload a CSV/PDF to get started.",
             "analysis": None,
-            "insights": None,
             "fin_score": 650, # Default score
-            "receivables": [] # --- NEW: Empty list fallback
+            "receivables": [] 
         }
 
     import pandas as pd
@@ -300,6 +300,45 @@ async def get_dashboard(
     } for tx in raw_history]
     
     df = pd.DataFrame(data)
+    
+    # 2. Run blazing-fast Pandas math
+    analysis = analyze_finances(df)
+    calculated_score = calculate_finscore(raw_history)
+
+    # 3. Calculate Receivables
+    receivables = {}
+    for tx in raw_history:
+        if tx.split_with and tx.split_amount:
+            if tx.split_with in receivables:
+                receivables[tx.split_with] += tx.split_amount
+            else:
+                receivables[tx.split_with] = tx.split_amount
+
+    receivables_list = [{"name": k, "amount": v} for k, v in receivables.items() if v > 0]
+
+    # NOTICE: We removed the AI call here! It returns instantly now.
+    return {
+        "user": current_user.full_name or current_user.email,
+        "total_transactions": len(raw_history),
+        "analysis": analysis,
+        "fin_score": calculated_score, 
+        "receivables": receivables_list
+    }
+
+# --- NEW: Dedicated endpoint just for the slow AI generation ---
+@app.get("/dashboard/insights/")
+async def get_dashboard_insights(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    raw_history = await get_user_transactions(db, current_user.id, limit=30)
+    
+    if not raw_history:
+        return {"ai_advisor": None}
+        
+    import pandas as pd
+    data = [{"Amount": tx.amount, "Category": tx.category, "Description": tx.description, "Date": tx.date} for tx in raw_history]
+    df = pd.DataFrame(data)
     analysis = analyze_finances(df)
 
     history_data = [
@@ -309,38 +348,18 @@ async def get_dashboard(
             "category": tx.category, 
             "description": tx.description
         } 
-        for tx in raw_history[:30]
+        for tx in raw_history
     ]
 
     try:
+        # This is the slow part! It now runs completely asynchronously.
         insights = generate_ai_insights_llm(analysis, history_data)
     except Exception as e:
         insights = f"AI could not generate insights: {str(e)}"
 
-    # Calculate the user's score based on their raw history
-    calculated_score = calculate_finscore(raw_history)
+    return {"ai_advisor": insights}
 
-    # --- NEW: Calculate Who Owes Me ---
-    receivables = {}
-    for tx in raw_history:
-        if tx.split_with and tx.split_amount:
-            # Group debts by person (e.g., if Rahul owes you for 3 different dinners)
-            if tx.split_with in receivables:
-                receivables[tx.split_with] += tx.split_amount
-            else:
-                receivables[tx.split_with] = tx.split_amount
 
-    # Convert dictionary to a nice list for the frontend
-    receivables_list = [{"name": k, "amount": v} for k, v in receivables.items() if v > 0]
-
-    return {
-        "user": current_user.full_name or current_user.email,
-        "total_transactions": len(raw_history),
-        "analysis": analysis,
-        "ai_advisor": insights,
-        "fin_score": calculated_score, 
-        "receivables": receivables_list # --- NEW: Send debts to frontend ---
-    }
 
 # --- UPDATED: Dynamic AI Personas Chat Endpoint ---
 @app.post("/chat")
