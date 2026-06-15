@@ -10,14 +10,19 @@ export const useAppStore = create((set, get) => ({
   error: null,
   isChatOpen: false,
 
+  // --- NEW: Separate AI State ---
+  aiInsight: null,
+  insightLoading: false,
+
   setChatOpen: (isOpen) => set({ isChatOpen: isOpen }),
+
+  clearError: () => set({ error: null }),
 
   login: async (email, password) => {
     set({ loading: true, error: null })
     try {
-      // Reverted back to standard JSON dictionary because your specific backend expects it!
       const payload = {
-        email: email, // Depending on your backend, this might need to be 'username: email'
+        email: email,
         password: password,
       }
 
@@ -30,8 +35,13 @@ export const useAppStore = create((set, get) => ({
       set({ loading: false })
       return true
     } catch (err) {
+      const errorMessage =
+        err.response?.data?.detail ||
+        err.message ||
+        'Invalid email or password. Please try again.'
+
       set({
-        error: err.response?.data?.detail || 'Login failed',
+        error: errorMessage,
         loading: false,
       })
       return false
@@ -41,7 +51,6 @@ export const useAppStore = create((set, get) => ({
   signup: async (email, password, name) => {
     set({ loading: true, error: null })
     try {
-      // FIX 2: Match your backend Pydantic schema exactly (full_name)
       const payload = {
         email: email,
         password: password,
@@ -65,12 +74,17 @@ export const useAppStore = create((set, get) => ({
 
   logout: () => {
     localStorage.removeItem('token')
-    set({ token: null, user: null, dashboardData: null, transactions: [] })
+    set({
+      token: null,
+      user: null,
+      dashboardData: null,
+      transactions: [],
+      aiInsight: null,
+    })
   },
 
   fetchUser: async () => {
     try {
-      // FIX 3: Point to /me instead of /auth/me
       const res = await api.get('/me')
       set({ user: res.data })
     } catch (err) {
@@ -81,10 +95,28 @@ export const useAppStore = create((set, get) => ({
   fetchDashboard: async () => {
     set({ loading: true })
     try {
+      // 1. Instantly get the charts and numbers
       const res = await api.get('/dashboard/')
       set({ dashboardData: res.data, loading: false })
+
+      // 2. Once the dashboard loads, tell the AI to start thinking in the background!
+      get().fetchInsights()
     } catch (err) {
       set({ error: 'Failed to fetch dashboard metrics', loading: false })
+    }
+  },
+
+  // --- NEW: Dedicated function for the slow AI ---
+  fetchInsights: async () => {
+    set({ insightLoading: true })
+    try {
+      const res = await api.get('/dashboard/insights/')
+      set({ aiInsight: res.data.ai_advisor, insightLoading: false })
+    } catch (err) {
+      set({
+        aiInsight: 'Could not connect to the AI right now.',
+        insightLoading: false,
+      })
     }
   },
 

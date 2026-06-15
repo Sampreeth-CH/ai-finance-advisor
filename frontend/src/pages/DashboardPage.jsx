@@ -35,6 +35,8 @@ const DashboardPage = () => {
     fetchTransactions,
     loading,
     error,
+    aiInsight, // --- NEW ---
+    insightLoading, // --- NEW ---
   } = useAppStore()
 
   useEffect(() => {
@@ -85,15 +87,13 @@ const DashboardPage = () => {
           <p className='text-slate-200 font-medium animate-pulse text-lg tracking-wide'>
             Syncing Financial Data...
           </p>
-          <p className='text-slate-500 text-sm mt-2'>
-            AI is compiling your latest insights.
-          </p>
         </div>
       </div>
     )
   }
 
-  const { analysis, ai_advisor, fin_score, receivables } = dashboardData
+  // Notice we removed ai_advisor from here
+  const { analysis, fin_score, receivables } = dashboardData
   const userScore = fin_score || 650
 
   const chartData =
@@ -258,7 +258,7 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      {/* ROW 4: AI Insights Brief */}
+      {/* ROW 4: AI Insights Brief (NOW ASYNC LAZY-LOADED) */}
       <div className='glass-panel p-6 flex flex-col border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.05)] relative overflow-hidden'>
         <div className='absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 blur-[50px] pointer-events-none rounded-full' />
 
@@ -277,7 +277,14 @@ const DashboardPage = () => {
         </div>
 
         <div className='max-h-[250px] overflow-y-auto pr-2 relative z-10'>
-          {ai_advisor ? (
+          {insightLoading ? (
+            <div className='flex items-center gap-3 text-cyan-400 py-4'>
+              <div className='w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin'></div>
+              <p className='text-sm font-medium animate-pulse'>
+                Llama 3.3 is analyzing your latest data...
+              </p>
+            </div>
+          ) : aiInsight ? (
             <div className='text-slate-300 leading-relaxed text-sm'>
               <ReactMarkdown
                 components={{
@@ -295,7 +302,7 @@ const DashboardPage = () => {
                   ),
                 }}
               >
-                {String(ai_advisor)}
+                {String(aiInsight)}
               </ReactMarkdown>
             </div>
           ) : (
