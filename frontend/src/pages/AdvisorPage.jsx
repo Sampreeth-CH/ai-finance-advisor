@@ -65,6 +65,9 @@ const AdvisorPage = () => {
     },
   ]
 
+  // Ensure you are pulling `language` from the store at the top of AdvisorPage.jsx:
+  // const { dashboardData, fetchDashboard, language } = useAppStore()
+
   const handleSendMessage = async (e) => {
     e.preventDefault()
     if (!chatMessage.trim()) return
@@ -79,6 +82,7 @@ const AdvisorPage = () => {
         message: userMsg,
         history: chatHistory.slice(-4), // Send last 4 messages for context
         persona: activePersona,
+        language: language, // <--- NEW: Sending selected language to backend
       })
 
       setChatHistory((prev) => [
