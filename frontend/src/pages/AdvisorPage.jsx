@@ -112,18 +112,19 @@ const AdvisorPage = () => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className='space-y-6 h-[calc(100vh-100px)] flex flex-col pb-4'
+      // FIX 3: flex-1 perfectly fills the parent <main> without overflowing
+      className='flex-1 flex flex-col min-h-0 space-y-6'
     >
-      <div className='flex justify-between items-center'>
+      <div className='flex justify-between items-center shrink-0'>
         <h1 className='text-2xl font-bold text-white'>AI Copilot</h1>
       </div>
 
-      <div className='grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0'>
+      <div className='grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0 pb-2'>
         {/* LEFT SIDE: The Master Report */}
-        <div className='glass-panel p-6 flex flex-col border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.05)] relative overflow-hidden'>
+        <div className='glass-panel p-6 flex flex-col border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.05)] relative overflow-hidden min-h-[400px]'>
           <div className='absolute top-0 left-0 w-64 h-64 bg-cyan-500/10 blur-[80px] pointer-events-none rounded-full' />
 
-          <div className='flex items-center gap-4 mb-6 relative z-10 border-b border-slate-800 pb-4'>
+          <div className='flex items-center gap-4 mb-6 relative z-10 border-b border-slate-800 pb-4 shrink-0'>
             <div className='p-3 bg-cyan-500/20 rounded-xl'>
               <Bot className='text-cyan-400 w-6 h-6' />
             </div>
@@ -137,7 +138,7 @@ const AdvisorPage = () => {
             </div>
           </div>
 
-          <div className='flex-1 overflow-y-auto pr-4 relative z-10'>
+          <div className='flex-1 overflow-y-auto pr-4 relative z-10 custom-scrollbar'>
             {ai_advisor ? (
               <div className='text-slate-300 leading-relaxed text-sm space-y-4'>
                 <ReactMarkdown
@@ -182,9 +183,9 @@ const AdvisorPage = () => {
         </div>
 
         {/* RIGHT SIDE: Interactive Persona Chat */}
-        <div className='glass-panel flex flex-col relative overflow-hidden'>
+        <div className='glass-panel flex flex-col relative overflow-hidden min-h-[500px]'>
           {/* Persona Selector Header */}
-          <div className='p-4 border-b border-slate-800 bg-slate-900/50'>
+          <div className='p-4 border-b border-slate-800 bg-slate-900/50 shrink-0'>
             <p className='text-xs text-slate-400 uppercase tracking-wider font-bold mb-3'>
               Select AI Personality
             </p>
@@ -213,7 +214,7 @@ const AdvisorPage = () => {
           </div>
 
           {/* Chat History */}
-          <div className='flex-1 overflow-y-auto p-4 space-y-4'>
+          <div className='flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar'>
             {chatHistory.map((msg, idx) => (
               <div
                 key={idx}
@@ -251,7 +252,7 @@ const AdvisorPage = () => {
           </div>
 
           {/* Chat Input */}
-          <div className='p-4 border-t border-slate-800 bg-slate-900/50'>
+          <div className='p-4 border-t border-slate-800 bg-slate-900/50 shrink-0'>
             <form onSubmit={handleSendMessage} className='flex gap-2'>
               <input
                 type='text'

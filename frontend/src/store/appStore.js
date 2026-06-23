@@ -35,10 +35,32 @@ export const useAppStore = create((set, get) => ({
       set({ loading: false })
       return true
     } catch (err) {
-      const errorMessage =
-        err.response?.data?.detail ||
-        err.message ||
-        'Invalid email or password. Please try again.'
+      // --- BULLETPROOF ERROR HANDLING ---
+      let errorMessage = 'Invalid email or password. Please try again.'
+
+      // Safely dig into the error response
+      if (err.response?.data?.detail) {
+        const detail = err.response.data.detail
+
+        if (typeof detail === 'string') {
+          // It's a standard error string
+          errorMessage = detail
+        } else if (Array.isArray(detail)) {
+          // It's a FastAPI 422 Validation Error (Array of objects)
+          errorMessage =
+            detail[0]?.msg || 'Validation Error: Check your input format.'
+        } else {
+          // It's some other weird object format, safely stringify it
+          try {
+            errorMessage = JSON.stringify(detail)
+          } catch (e) {
+            errorMessage = 'An unknown error occurred.'
+          }
+        }
+      } else if (err.message) {
+        // Network errors (e.g., Server down)
+        errorMessage = err.message
+      }
 
       set({
         error: errorMessage,
@@ -65,7 +87,11 @@ export const useAppStore = create((set, get) => ({
       if (err.response?.status === 422) {
         errorMsg = err.response.data.detail[0]?.msg || 'Validation Error'
       } else if (err.response?.data?.detail) {
-        errorMsg = err.response.data.detail
+        // Apply similar safe string conversion for signup
+        errorMsg =
+          typeof err.response.data.detail === 'string'
+            ? err.response.data.detail
+            : JSON.stringify(err.response.data.detail)
       }
       set({ error: errorMsg, loading: false })
       return false

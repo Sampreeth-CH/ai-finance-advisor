@@ -63,7 +63,8 @@ const LoginPage = () => {
               className='bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm flex items-start gap-3 overflow-hidden'
             >
               <AlertCircle size={18} className='shrink-0 mt-0.5' />
-              <span>{error}</span>
+              {/* --- FIXED: Force the error to be a string --- */}
+              <span>{String(error)}</span>
             </motion.div>
           )}
         </AnimatePresence>

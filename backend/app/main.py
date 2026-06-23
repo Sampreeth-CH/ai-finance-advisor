@@ -171,6 +171,9 @@ async def upload_file(
         
         # Analyze using the perfectly categorized and signed data
         analysis = analyze_finances(df)
+        total_income = analysis.get("total_income", 0)
+        total_expense = analysis.get("total_expense", 0)
+        analysis["net_allocation"] = total_income - total_expense
         insights = generate_ai_insights_llm(analysis)
 
     except Exception as e:
@@ -339,7 +342,13 @@ async def get_dashboard_insights(
     import pandas as pd
     data = [{"Amount": tx.amount, "Category": tx.category, "Description": tx.description, "Date": tx.date} for tx in raw_history]
     df = pd.DataFrame(data)
+    
     analysis = analyze_finances(df)
+
+    # --- THE FIX: Force the backend to calculate Net Allocation so the AI can see it ---
+    total_income = analysis.get("total_income", 0)
+    total_expense = analysis.get("total_expense", 0)
+    analysis["net_allocation"] = total_income - total_expense
 
     history_data = [
         {
@@ -352,7 +361,7 @@ async def get_dashboard_insights(
     ]
 
     try:
-        # This is the slow part! It now runs completely asynchronously.
+        # Now the AI will read the exact correct net_allocation!
         insights = generate_ai_insights_llm(analysis, history_data)
     except Exception as e:
         insights = f"AI could not generate insights: {str(e)}"
