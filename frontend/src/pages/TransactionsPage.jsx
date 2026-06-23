@@ -151,15 +151,16 @@ const TransactionsPage = () => {
   }
 
   const analysis = dashboardData?.analysis || {}
-  const totalIncome = analysis.total_income || 0
-  const totalExpense = analysis.total_expense || 0
-  const netAllocation = analysis.net_allocation || 0
+  const totalIncome = Number(analysis.total_income) || 0
+  const totalExpense = Number(analysis.total_expense) || 0
+
+  // --- FIXED: Explicitly calculate Net Balance using Income - Expense ---
+  const netAllocation = totalIncome - totalExpense
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      // FIX 1: Removed `h-full flex flex-col`. Let the page scroll naturally!
       className='space-y-6 pb-8'
     >
       <div className='flex justify-between items-center'>
@@ -173,14 +174,14 @@ const TransactionsPage = () => {
         </button>
       </div>
 
-      {/* FIX 2: Made the Live Pulse Banner responsive (grid-cols-1 on mobile, md:grid-cols-3 on desktop) */}
       <div className='grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-900/50 border border-slate-800 rounded-2xl p-4'>
         <div className='flex flex-col border-b md:border-b-0 md:border-r border-slate-800 px-4 pb-4 md:pb-0'>
           <span className='text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1'>
             Total Income
           </span>
           <span className='text-xl font-bold text-emerald-400 flex items-center gap-1'>
-            <ArrowUpRight size={18} /> ₹{totalIncome.toLocaleString()}
+            <ArrowUpRight size={18} /> ₹
+            {totalIncome.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </span>
         </div>
         <div className='flex flex-col border-b md:border-b-0 md:border-r border-slate-800 px-4 py-4 md:py-0'>
@@ -188,7 +189,8 @@ const TransactionsPage = () => {
             Total Spent
           </span>
           <span className='text-xl font-bold text-red-400 flex items-center gap-1'>
-            <ArrowDownRight size={18} /> ₹{totalExpense.toLocaleString()}
+            <ArrowDownRight size={18} /> ₹
+            {totalExpense.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </span>
         </div>
         <div className='flex flex-col px-4 pt-4 md:pt-0'>
@@ -198,7 +200,11 @@ const TransactionsPage = () => {
           <span
             className={`text-xl font-bold flex items-center gap-2 ${netAllocation >= 0 ? 'text-brand-glow' : 'text-rose-400'}`}
           >
-            <Wallet size={18} /> ₹{netAllocation.toLocaleString()}
+            <Wallet size={18} />
+            {netAllocation >= 0 ? '₹' : '-₹'}
+            {Math.abs(netAllocation).toLocaleString('en-IN', {
+              maximumFractionDigits: 0,
+            })}
           </span>
         </div>
       </div>
@@ -313,7 +319,6 @@ const TransactionsPage = () => {
         </div>
       </div>
 
-      {/* FIX 3: Removed `flex-1 min-h-0 overflow-hidden` from the table wrapper. The page dictates the scroll now. */}
       <div className='glass-panel'>
         <div className='p-4 border-b border-slate-800/60 bg-slate-900/40'>
           <h3 className='text-lg font-medium text-white flex items-center gap-2'>
@@ -321,7 +326,6 @@ const TransactionsPage = () => {
           </h3>
         </div>
 
-        {/* FIX 4: `overflow-x-auto` allows horizontal scrolling for the table on tiny phones without breaking the vertical page scroll */}
         <div className='overflow-x-auto p-0'>
           {loading ? (
             <div className='flex items-center justify-center h-32'>

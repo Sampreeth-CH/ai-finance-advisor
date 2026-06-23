@@ -156,9 +156,16 @@ const DashboardPage = () => {
         />
         <StatCard
           title='Net Allocation'
-          amount={analysis?.net_allocation}
+          amount={
+            (Number(analysis?.total_income) || 0) -
+            (Number(analysis?.total_expense) || 0)
+          }
           icon={<DollarSign size={24} />}
-          isPositive={Number(analysis?.net_allocation) >= 0}
+          isPositive={
+            (Number(analysis?.total_income) || 0) -
+              (Number(analysis?.total_expense) || 0) >=
+            0
+          }
         />
       </div>
 
