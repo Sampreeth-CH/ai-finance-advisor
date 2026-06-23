@@ -10,9 +10,33 @@ export const useAppStore = create((set, get) => ({
   error: null,
   isChatOpen: false,
 
-  // --- NEW: Separate AI State ---
+  // --- Separate AI State ---
   aiInsight: null,
   insightLoading: false,
+
+  // --- NEW: Global Preference States ---
+  language: localStorage.getItem('ai_finance_lang') || 'English',
+  currency: localStorage.getItem('ai_finance_currency') || 'INR',
+
+  // --- NEW: Actions to update preferences globally ---
+  setLanguage: (lang) => {
+    localStorage.setItem('ai_finance_lang', lang)
+    set({ language: lang })
+  },
+
+  setCurrency: (curr) => {
+    localStorage.setItem('ai_finance_currency', curr)
+    set({ currency: curr })
+  },
+
+  // --- NEW: Helper function to format money anywhere in the app ---
+  formatCurrency: (amount) => {
+    if (amount === undefined || amount === null) return ''
+    const { currency } = get()
+    const symbols = { INR: '₹', USD: '$', EUR: '€' }
+    const sym = symbols[currency] || '₹'
+    return `${sym}${Number(amount).toLocaleString()}`
+  },
 
   setChatOpen: (isOpen) => set({ isChatOpen: isOpen }),
 
@@ -132,11 +156,16 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
-  // --- NEW: Dedicated function for the slow AI ---
+  // --- UPDATED: Dedicated function for the slow AI that passes the Language ---
   fetchInsights: async () => {
     set({ insightLoading: true })
     try {
-      const res = await api.get('/dashboard/insights/')
+      // Fetch the current language from the store, default to English
+      const currentLang = get().language || 'English'
+
+      // Pass the language as a query parameter to FastAPI
+      const res = await api.get(`/dashboard/insights/?language=${currentLang}`)
+
       set({ aiInsight: res.data.ai_advisor, insightLoading: false })
     } catch (err) {
       set({
