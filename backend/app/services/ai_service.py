@@ -1,7 +1,7 @@
 import requests
 from app.core.config import settings
 
-def generate_ai_insights_llm(analysis, history_data=None):
+def generate_ai_insights_llm(analysis, history_data=None, language="English"): # <--- NEW: Added language parameter
     if not analysis:
         return "No financial data available to analyze yet. Add some transactions!"
 
@@ -34,6 +34,11 @@ Provide a short, punchy, and actionable 3-paragraph summary:
 Keep it conversational, insightful, and concise. 
 Format all currency in Indian Rupees (₹). 
 Use Markdown formatting (like **bolding** key terms and numbers) so it looks beautiful on the dashboard.
+
+IMPORTANT RULE: You MUST write your ENTIRE response natively in {language}. 
+Do not use English unless the requested language is English. 
+If {language} is Kannada, write strictly in Kannada script.
+If {language} is Hindi, write strictly in Devanagari script.
 """
 
     # 3. Call Groq's Blazing Fast API

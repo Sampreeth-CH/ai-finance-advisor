@@ -40,6 +40,7 @@ class ChatPayload(BaseModel):
     message: str
     history: list = []
     persona: str = "professional"
+    language: str = "English"
 
 # --- NEW: Profile Update Schema ---
 class ProfileUpdate(BaseModel):
@@ -331,6 +332,7 @@ async def get_dashboard(
 # --- NEW: Dedicated endpoint just for the slow AI generation ---
 @app.get("/dashboard/insights/")
 async def get_dashboard_insights(
+    language: str = "English", # <--- NEW: Accept language from query params
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -361,8 +363,8 @@ async def get_dashboard_insights(
     ]
 
     try:
-        # Now the AI will read the exact correct net_allocation!
-        insights = generate_ai_insights_llm(analysis, history_data)
+        # Now the AI will read the exact correct net_allocation AND Language!
+        insights = generate_ai_insights_llm(analysis, history_data, language) # <--- NEW: Pass language to LLM
     except Exception as e:
         insights = f"AI could not generate insights: {str(e)}"
 
@@ -403,7 +405,13 @@ Here are the user's most recent transactions:
 Here is the recent conversation history:
 {chat_context}
 
-Respond directly to the User's last message: "{payload.message}". Keep it highly engaging, format any currency in Indian Rupees (₹), and stay perfectly in character!"""
+Respond directly to the User's last message: "{payload.message}". Keep it highly engaging, format any currency in Indian Rupees (₹), and stay perfectly in character!
+
+IMPORTANT RULE: You MUST write your ENTIRE response in {payload.language}. 
+Do not use English unless the requested language is English.
+If {payload.language} is Kannada, write strictly in Kannada script.
+If {payload.language} is Hindi, write strictly in Devanagari script.
+"""
 
     try:
         api_key = settings.GROQ_API_KEY
