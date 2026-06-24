@@ -1,11 +1,9 @@
 from app.services.ai_service import generate_ai_insights_llm
 from app.services.analyzer import analyze_finances
 from fastapi.middleware.cors import CORSMiddleware
-from app.services.categorizer import categorize_transaction
 from app.services.pdf_service import extract_pdf_data
 from fastapi import FastAPI, UploadFile, File
 from fastapi import Body
-from app.services.ml_model import predict_category
 import pandas as pd
 import shutil
 import os
