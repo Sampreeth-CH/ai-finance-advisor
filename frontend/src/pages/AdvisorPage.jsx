@@ -14,7 +14,9 @@ import {
 import ReactMarkdown from 'react-markdown'
 
 const AdvisorPage = () => {
-  const { dashboardData, fetchDashboard } = useAppStore()
+  // --- THE FIX: We must pull 'language' from useAppStore here! ---
+  const { dashboardData, fetchDashboard, language } = useAppStore()
+
   const [activePersona, setActivePersona] = useState('professional')
   const [chatMessage, setChatMessage] = useState('')
   const [chatHistory, setChatHistory] = useState([
@@ -65,9 +67,6 @@ const AdvisorPage = () => {
     },
   ]
 
-  // Ensure you are pulling `language` from the store at the top of AdvisorPage.jsx:
-  // const { dashboardData, fetchDashboard, language } = useAppStore()
-
   const handleSendMessage = async (e) => {
     e.preventDefault()
     if (!chatMessage.trim()) return
@@ -80,9 +79,10 @@ const AdvisorPage = () => {
     try {
       const response = await api.post('/chat', {
         message: userMsg,
-        history: chatHistory.slice(-4), // Send last 4 messages for context
+        history: chatHistory.slice(-4),
         persona: activePersona,
-        language: language, // <--- NEW: Sending selected language to backend
+        // --- THE FIX: Send the language to the backend safely ---
+        language: language || 'English',
       })
 
       setChatHistory((prev) => [
@@ -116,7 +116,6 @@ const AdvisorPage = () => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      // FIX 3: flex-1 perfectly fills the parent <main> without overflowing
       className='flex-1 flex flex-col min-h-0 space-y-6'
     >
       <div className='flex justify-between items-center shrink-0'>
