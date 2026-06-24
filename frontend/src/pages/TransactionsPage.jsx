@@ -28,6 +28,7 @@ const TransactionsPage = () => {
     loading,
     dashboardData,
     fetchDashboard,
+    deleteTransaction, // <-- ADDED: Pulling the new delete function from store
   } = useAppStore()
   const [isUploading, setIsUploading] = useState(false)
   const [manualEntries, setManualEntries] = useState([
@@ -154,7 +155,6 @@ const TransactionsPage = () => {
   const totalIncome = Number(analysis.total_income) || 0
   const totalExpense = Number(analysis.total_expense) || 0
 
-  // --- FIXED: Explicitly calculate Net Balance using Income - Expense ---
   const netAllocation = totalIncome - totalExpense
 
   return (
@@ -351,6 +351,10 @@ const TransactionsPage = () => {
                   <th className='px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right'>
                     Amount
                   </th>
+                  {/* ADDED: Actions Column Header */}
+                  <th className='px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right'>
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className='divide-y divide-slate-800/50'>
@@ -375,6 +379,24 @@ const TransactionsPage = () => {
                     >
                       {tx.amount < 0 ? '-' : '+'}
                       {formatCurrency(Math.abs(tx.amount))}
+                    </td>
+                    {/* ADDED: Actions Column Cell with Delete Button */}
+                    <td className='px-6 py-4 whitespace-nowrap text-right'>
+                      <button
+                        onClick={async () => {
+                          if (
+                            window.confirm(
+                              'Are you sure you want to delete this specific transaction?',
+                            )
+                          ) {
+                            await deleteTransaction(tx.id)
+                          }
+                        }}
+                        className='p-2 text-slate-500 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors inline-flex'
+                        title='Delete Transaction'
+                      >
+                        <Trash2 size={18} />
+                      </button>
                     </td>
                   </tr>
                 ))}
