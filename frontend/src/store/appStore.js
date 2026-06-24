@@ -183,4 +183,26 @@ export const useAppStore = create((set, get) => ({
       console.error('Failed to fetch transactions:', err)
     }
   },
+
+  // --- NEW: Delete a single transaction ---
+  deleteTransaction: async (transactionId) => {
+    try {
+      await api.delete(`/transactions/${transactionId}`)
+
+      // 1. Instantly remove it from the local table so the UI feels blazing fast
+      set((state) => ({
+        transactions: state.transactions.filter(
+          (tx) => tx.id !== transactionId,
+        ),
+      }))
+
+      // 2. Re-fetch the dashboard charts quietly in the background so the math updates!
+      get().fetchDashboard()
+
+      return true
+    } catch (err) {
+      console.error('Failed to delete transaction:', err)
+      return false
+    }
+  },
 }))
