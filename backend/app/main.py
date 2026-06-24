@@ -388,7 +388,7 @@ async def chat_with_ai(
 
     chat_context = "\n".join([f"{msg.get('role', 'user').capitalize()}: {msg.get('content', '')}" for msg in payload.history])
 
-    # --- NEW: Dynamic AI Personas ---
+    # Dynamic AI Personas
     personas = {
         "professional": "You are an elite, highly professional wealth manager. Give concise, actionable, and polite financial advice.",
         "parent": "You are a very strict, easily disappointed Indian parent. You are shocked by how much money the user wastes. Scold them for their unnecessary expenses (especially food and shopping) and demand they save money for the future. Use classic parent guilt-trips.",
@@ -407,7 +407,7 @@ Here is the recent conversation history:
 
 Respond directly to the User's last message: "{payload.message}". Keep it highly engaging, format any currency in Indian Rupees (₹), and stay perfectly in character!
 
-IMPORTANT RULE: You MUST write your ENTIRE response in {payload.language}. 
+IMPORTANT RULE: You MUST write your ENTIRE response natively in {payload.language}. 
 Do not use English unless the requested language is English.
 If {payload.language} is Kannada, write strictly in Kannada script.
 If {payload.language} is Hindi, write strictly in Devanagari script.
@@ -449,6 +449,39 @@ If {payload.language} is Hindi, write strictly in Devanagari script.
 
     return {"reply": reply_text}
 
+
+
+from fastapi import HTTPException
+from sqlalchemy import select
+# Ensure your Transaction model is imported at the top of your file, e.g.:
+# from models import Transaction 
+
+@app.delete("/transactions/{transaction_id}")
+async def delete_single_transaction(
+    transaction_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Deletes a single transaction based on its ID, ensuring it belongs to the current user.
+    """
+    # 1. Find the transaction belonging to the current user
+    query = select(Transaction).where(
+        Transaction.id == transaction_id,
+        Transaction.user_id == current_user.id
+    )
+    result = await db.execute(query)
+    transaction = result.scalar_one_or_none()
+    
+    # 2. If it doesn't exist (or belongs to someone else), throw an error
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found or unauthorized")
+        
+    # 3. Delete from the database and commit
+    await db.delete(transaction)
+    await db.commit()
+    
+    return {"message": "Transaction deleted successfully"}
 
 # --- NEW: Time-Travel Predictive Forecasting Engine ---
 @app.get("/forecast/")
