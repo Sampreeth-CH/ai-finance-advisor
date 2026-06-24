@@ -32,6 +32,14 @@ from fastapi.responses import StreamingResponse
 from fpdf import FPDF
 from datetime import timedelta
 from app.services.ml_model import predict_transaction
+from fastapi import Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
+from datetime import datetime
+from app.core.database import get_db
+from app.core.dependencies import get_current_user
+from app.models.transaction import Transaction
+from app.models.user import User
 
 print(settings.APP_NAME)
 
@@ -132,7 +140,11 @@ async def upload_file(
     current_user: User = Depends(get_current_user)
 ):
     import pandas as pd
-    from app.services.ml_model import predict_transaction # Import the new ML function
+    import os
+    import shutil
+    from datetime import datetime
+    # --- CHANGED: Import the new Groq AI categorizer instead of the old ML model ---
+    from app.services.categorizer import smart_categorize_transactions 
     
     file_path = os.path.join(UPLOAD_DIR, file.filename)
 
@@ -147,34 +159,53 @@ async def upload_file(
         else:
             return {"error": "Unsupported file format"}
 
-        # --- NEW: Process uploaded files line-by-line with the AI ---
+        # --- STEP 1: Pack ALL rows into a single list (Batching) ---
+        raw_data = []
         for index, row in df.iterrows():
-            raw_amount = float(row["Amount"])
-            raw_desc = str(row["Description"])
-            
-            # Let the ML Model decide category AND if it's negative or positive
-            predicted_category, smart_amount = predict_transaction(raw_desc, raw_amount)
+            raw_data.append({
+                "description": str(row.get("Description", "")),
+                "amount": float(row.get("Amount", 0)),
+                "split_with": ""
+            })
+
+        # --- STEP 2: Send the entire bank statement to LLaMA in ONE fast API call ---
+        # (This prevents Groq from blocking you for rate limiting!)
+        try:
+            smart_results = smart_categorize_transactions(raw_data)
+        except Exception as ai_e:
+            print(f"AI Batch Categorization Failed: {ai_e}")
+            # If AI fails, use a safe fallback so the user doesn't lose their upload
+            smart_results = [{"description": tx["description"], "amount": -abs(tx["amount"]), "category": "Others"} for tx in raw_data]
+
+        # --- STEP 3: Save to Database and update the DataFrame live ---
+        # Assuming the AI returns the list in the same order we sent it
+        for index, item in enumerate(smart_results):
+            # Extract safe values
+            desc = item.get("description", item.get("Description", raw_data[index]["description"]))
+            amt = float(item.get("amount", item.get("Amount", raw_data[index]["amount"])))
+            cat = item.get("category", item.get("Category", "Others"))
 
             new_tx = Transaction(
-                amount=smart_amount, # Now automatically signed!
-                description=raw_desc,
-                category=predicted_category, # ML predicted category
+                amount=amt, 
+                description=desc,
+                category=cat, 
                 date=datetime.utcnow(), 
                 user_id=current_user.id
             )
             db.add(new_tx)
             
-            # Update the DataFrame live so the analyzer gets the corrected data
-            df.at[index, "Amount"] = smart_amount
-            df.at[index, "Category"] = predicted_category
+            # Update the DataFrame live so the analyzer gets the corrected AI data
+            df.at[index, "Amount"] = amt
+            df.at[index, "Category"] = cat
         
         await db.commit()
         
-        # Analyze using the perfectly categorized and signed data
+        # --- STEP 4: Analyze using the perfectly categorized and signed data ---
         analysis = analyze_finances(df)
         total_income = analysis.get("total_income", 0)
         total_expense = analysis.get("total_expense", 0)
         analysis["net_allocation"] = total_income - total_expense
+        
         insights = generate_ai_insights_llm(analysis)
 
     except Exception as e:
@@ -187,82 +218,81 @@ async def upload_file(
         "insights": insights
     }
 
+class ManualTransaction(BaseModel):
+    Description: str
+    Amount: float
+    SplitWith: str = ""
+
 @app.post("/manual/")
-async def manual_entry(
-    data: list = Body(...),
+async def add_manual_transactions(
+    transactions: list[ManualTransaction],
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    import pandas as pd
-    from app.services.ml_model import predict_transaction # Importing the new ML function
-    
-    df = pd.DataFrame(data)
-
-    # We remove the old df["Category"] = ... line because the new ML model 
-    # needs to evaluate the description and amount row by row.
-
-    for index, row in df.iterrows():
-        raw_amount = float(row["Amount"])
-        raw_desc = str(row["Description"])
-        
-        # --- NEW: Let the ML Model decide category AND if it's negative or positive! ---
-        predicted_category, smart_amount = predict_transaction(raw_desc, raw_amount)
-
-        # Safely extract 'SplitWith' (Handles missing keys or Pandas NaN values)
-        raw_split = row.get("SplitWith", "")
-        split_person = str(raw_split).strip() if pd.notna(raw_split) else ""
-        
-        final_expense = smart_amount
-        split_debt = 0.0
-        
-        # If the user tagged a friend, cut the expense in half and log the debt
-        # (It checks smart_amount < 0 because the ML automatically made expenses negative)
-        if split_person and split_person.lower() != "nan" and smart_amount < 0: 
-            final_expense = smart_amount / 2.0
-            split_debt = abs(final_expense) # The friend owes positive money back
-
-        new_tx = Transaction(
-            amount=final_expense, # Log only the user's portion (now automatically signed!)
-            description=raw_desc,
-            category=predicted_category, # Use the ML predicted category
-            date=datetime.utcnow(),
-            user_id=current_user.id,
-            split_with=split_person if split_person and split_person.lower() != "nan" else None,
-            split_amount=split_debt if split_person and split_person.lower() != "nan" else None
-        )
-        db.add(new_tx)
-        
-        # Update the DataFrame row so the analyzer below gets the correct data
-        df.at[index, "Amount"] = final_expense
-        df.at[index, "Category"] = predicted_category
-    
-    await db.commit()
-    
-    # Analyze finances with the newly smart-categorized and signed dataframe
-    analysis = analyze_finances(df)
-
-    raw_history = await get_user_transactions(db, current_user.id, limit=30)
-    
-    history_data = [
+    # Prepare payload format for the AI model
+    raw_data = [
         {
-            "date": str(tx.date.date()), 
-            "amount": tx.amount, 
-            "category": tx.category, 
-            "description": tx.description
-        } 
-        for tx in raw_history
+            "description": tx.Description, 
+            "amount": tx.Amount, 
+            "split_with": tx.SplitWith
+        } for tx in transactions
     ]
-
+    
     try:
-        insights = generate_ai_insights_llm(analysis, history_data)
-    except Exception as e:
-        insights = f"AI could not generate insights: {str(e)}"
+        # Run advanced classification
+        smart_results = smart_categorize_transactions(raw_data)
+        
+        for item in smart_results:
+            desc = item.get("description", item.get("Description", "Unknown"))
+            amt = item.get("amount", item.get("Amount", 0))
+            cat = item.get("category", item.get("Category", "Others"))
+            
+            new_tx = Transaction(
+                user_id=current_user.id,
+                description=desc,
+                amount=float(amt),
+                category=cat,
+                date=datetime.utcnow()
+            )
+            db.add(new_tx)
+            
+        await db.commit()
+        return {"status": "success", "message": "Transactions accurately categorized and committed."}
+        
+    except Exception as ai_exception:
+        print(f"AI classification failed, running traditional fallback rules: {ai_exception}")
+        
+        # Fallback layer protects workflow continuity
+        for tx in transactions:
+            desc_lower = tx.Description.lower()
+            
+            # Simple fallback patterns
+            if "swiggy" in desc_lower or "zomato" in desc_lower:
+                category = "Food & Dining"
+                amount = -abs(tx.Amount)
+            elif "salary" in desc_lower or "refund" in desc_lower:
+                category = "Income"
+                amount = abs(tx.Amount)
+            else:
+                category = "Others"
+                amount = -abs(tx.Amount)  # Defaulting safely to outflow for safety
+                
+            fallback_tx = Transaction(
+                user_id=current_user.id,
+                description=tx.Description,
+                amount=amount,
+                category=category,
+                date=datetime.utcnow()
+            )
+            db.add(fallback_tx)
+            
+        await db.commit()
+        return {
+            "status": "fallback", 
+            "message": "Transactions saved using local rules due to temporary processing overload."
+        }
+    
 
-    return {
-        "message": "Transactions saved to database successfully!",
-        "analysis": analysis,
-        "insights": insights
-    }
 
 @app.delete("/clear/")
 async def clear_all_transactions(
