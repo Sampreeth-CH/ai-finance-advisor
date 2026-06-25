@@ -6,46 +6,32 @@ from app.core.config import settings
 
 def smart_categorize_transactions(raw_transactions: list) -> list:
     """
-    Leverages LLaMA 3.3 to dynamically categorize transactions, detect type,
-    and normalize mathematical signs based on merchant intent.
+    Leverages LLaMA 3.3 to dynamically categorize transactions, detect money flow (Inflow/Outflow),
+    and assign an intelligent universal category based on world knowledge.
     """
     api_key = settings.GROQ_API_KEY
     if not api_key:
         raise Exception("Groq API Key is missing from configuration.")
 
-    # A comprehensive, clear financial taxonomy for accurate parsing
-    taxonomy = {
-        "Income": ["Salary", "Freelance", "Cashback", "Refund", "Investment Return", "Dividend", "Interest", "Transfer In"],
-        "Food & Dining": ["Restaurants", "Food Delivery (Swiggy, Zomato)", "Cafes", "Fast Food", "Pubs & Bars"],
-        "Groceries": ["Supermarkets", "Instamart", "Blinkit", "Zepto", "BigBasket", "Local Vendors"],
-        "Shopping": ["E-commerce (Amazon, Flipkart, Myntra)", "Apparel", "Electronics", "Home Decor"],
-        "Utilities & Bills": ["Rent", "Electricity", "Water", "Gas", "Internet", "Mobile Recharge", "Subscriptions (Netflix, OTT)"],
-        "Transport & Travel": ["Cabs (Uber, Ola, Rapido)", "Fuel (Petrol/Diesel)", "Metro", "Trains", "Flights", "Tolls"],
-        "Entertainment & Leisure": ["Movies", "Concerts", "Gaming", "Hobbies"],
-        "Health & Wellness": ["Medical", "Pharmacy", "Hospitals", "Gym", "Health Insurance"],
-        "Investment & Savings": ["Stocks", "Mutual Funds", "Gold", "Fixed Deposits"],
-        "Others": ["Miscellaneous", "Cash Withdrawals", "Unclassified Outflow"]
-    }
+    prompt = f"""You are a world-class AI Financial Analyst. 
+Your task is to analyze a list of raw transactions, assign a precise, universal category to each, and fix the mathematical sign based on whether money is entering or leaving the user's account.
 
-    prompt = f"""You are an advanced financial data processing engine running in India.
-Your task is to analyze a list of raw transaction items, infer the transaction category based on contextual intent, and determine if it is an Income or Expense.
+CRITICAL CASH FLOW RULES (Determine Positive vs Negative):
+1. INFLOW (Positive Amount): Any transaction where money is RECEIVED by the user. 
+   Examples: Salary, Scholarship, Pocket money, Grants, Refunds, Cashbacks, Selling items, Investment returns, Dividends, Gifts received, Loans received.
+2. OUTFLOW (Negative Amount): Any transaction where money is SPENT or SENT by the user. 
+   Examples: Food, Shopping, Subscriptions, Bills, Fees, Taxes, Loans paid, EMIs, sending money to friends.
+   -> You MUST convert outflow amounts to negative numbers (e.g., if the user enters "Swiggy" with amount 500, you MUST output -500.0).
 
-COMPREHENSIVE TAXONOMY & EXAMPLES:
-- Food & Dining: Swiggy, Zomato, Starbucks, McDonald's, Dineout, local restaurants.
-- Groceries: Zepto, Blinkit, Instamart, BigBasket, DMart, local provision stores.
-- Shopping: Amazon, Flipkart, Myntra, Ajio, Nykaa, Zara, Nike.
-- Transport & Travel: Uber, Ola, Rapido, Makemytrip, Indigo, IRCTC, HPCL/BPCL petrol pumps.
-- Utilities & Bills: Airtel, Jio, BESCOM, Tata Play, Netflix, Spotify, Rent payments.
-- Health & Wellness: Apollo Pharmacy, 1mg, hospital bills, Cult.fit, insurance premiums.
-- Income: Salary, salary credits, dividends, bank interest, cashback payouts, customer refunds.
-- Investment & Savings: Zerodha, Groww, AngelOne, mutual fund SIPs.
-- Others: Generic UPI transfers to individuals, ATM cash withdrawals, or ambiguous descriptions.
+UNIVERSAL CATEGORIZATION RULES:
+1. You are NOT restricted to a hardcoded list. Use your vast world knowledge to generate the most accurate, universally recognized category for the transaction.
+2. Keep the category name concise (1 to 3 words, Title Case). 
+   Examples of good categories: "Education", "Food & Dining", "Scholarships", "Health & Medical", "Utilities", "Transportation", "Freelance Income", "Personal Care", "Investment", "Entertainment".
+3. Group similar items intelligently (e.g., "Zomato" and "Starbucks" should both be "Food & Dining").
 
-STRICT PROCESSING RULES:
-1. Deduce the most contextually relevant category from the taxonomy. Do not invent categories outside of: {list(taxonomy.keys())}.
-2. Fix the numerical sign: Expenses MUST be negative numbers. Income MUST be positive numbers. (e.g., if a user manually adds "Swiggy" with an amount of 450, output -450.0).
-3. If the description explicitly mentions "Refund" or "Received", treat it as Income (Positive amount).
-4. Return ONLY a valid JSON array of objects. Do not wrap it in any dialogue, greeting, or summary text.
+OUTPUT FORMAT:
+Return ONLY a valid JSON array of objects with keys: "description", "amount", "category", "split_with".
+Do not wrap it in any dialogue, greeting, markdown tags, or summary text.
 
 INPUT DATA:
 {json.dumps(raw_transactions)}
@@ -60,7 +46,7 @@ Generate the perfectly structured JSON output now:"""
     payload = {
         "model": "llama-3.3-70b-versatile",
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.0  # Zero temperature forces absolute determinism and consistency
+        "temperature": 0.1  # Low temperature for highly logical deduction
     }
 
     try:
