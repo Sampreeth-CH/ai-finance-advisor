@@ -227,35 +227,44 @@ async def add_manual_transactions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Prepare payload format for the AI model
+    # 1. Prepare payload - Force everything to be positive so the AI doesn't get confused by math
     raw_data = [
         {
             "description": tx.Description, 
-            "amount": tx.Amount, 
+            "amount": abs(tx.Amount), 
             "split_with": tx.SplitWith
         } for tx in transactions
     ]
     
     try:
-        # Run advanced classification
+        # Run advanced classification (AI just labels it "income" or "expense")
         smart_results = smart_categorize_transactions(raw_data)
         
         for item in smart_results:
             desc = item.get("description", item.get("Description", "Unknown"))
-            amt = item.get("amount", item.get("Amount", 0))
+            raw_amt = float(item.get("amount", item.get("Amount", 0)))
             cat = item.get("category", item.get("Category", "Others"))
+            
+            # --- THE MAGIC BULLET FIX ---
+            # Python checks what the AI labeled it, and enforces the math sign safely
+            tx_type = item.get("type", "expense").lower()
+            
+            if tx_type == "income":
+                final_amount = abs(raw_amt)  # Ensure it is POSITIVE
+            else:
+                final_amount = -abs(raw_amt) # Ensure it is NEGATIVE
             
             new_tx = Transaction(
                 user_id=current_user.id,
                 description=desc,
-                amount=float(amt),
+                amount=final_amount,
                 category=cat,
                 date=datetime.utcnow()
             )
             db.add(new_tx)
             
         await db.commit()
-        return {"status": "success", "message": "Transactions accurately categorized and committed."}
+        return {"status": "success", "message": "Transactions accurately categorized and signed!"}
         
     except Exception as ai_exception:
         print(f"AI classification failed, running traditional fallback rules: {ai_exception}")
@@ -264,21 +273,21 @@ async def add_manual_transactions(
         for tx in transactions:
             desc_lower = tx.Description.lower()
             
-            # Simple fallback patterns
-            if "swiggy" in desc_lower or "zomato" in desc_lower:
-                category = "Food & Dining"
-                amount = -abs(tx.Amount)
-            elif "salary" in desc_lower or "refund" in desc_lower:
+            # Upgraded simple fallback patterns
+            if "scholarship" in desc_lower or "salary" in desc_lower or "refund" in desc_lower:
                 category = "Income"
-                amount = abs(tx.Amount)
+                final_amount = abs(tx.Amount)
+            elif "swiggy" in desc_lower or "zomato" in desc_lower:
+                category = "Food & Dining"
+                final_amount = -abs(tx.Amount)
             else:
                 category = "Others"
-                amount = -abs(tx.Amount)  # Defaulting safely to outflow for safety
+                final_amount = -abs(tx.Amount)  # Defaulting safely to outflow
                 
             fallback_tx = Transaction(
                 user_id=current_user.id,
                 description=tx.Description,
-                amount=amount,
+                amount=final_amount,
                 category=category,
                 date=datetime.utcnow()
             )
@@ -289,7 +298,6 @@ async def add_manual_transactions(
             "status": "fallback", 
             "message": "Transactions saved using local rules due to temporary processing overload."
         }
-    
 
 
 @app.delete("/clear/")
