@@ -1,65 +1,82 @@
 import json
+import re
 import requests
+from pydantic import BaseModel
 from app.core.config import settings
+
 
 def smart_categorize_transactions(raw_transactions: list) -> list:
     """
-    Universal Categorization Engine: Relies purely on AI world knowledge, zero hardcoded lists.
+    Leverages LLaMA 3.3 to dynamically categorize transactions, detect type,
+    and normalize mathematical signs based on merchant intent.
     """
     api_key = settings.GROQ_API_KEY
     if not api_key:
         raise Exception("Groq API Key is missing from configuration.")
 
-    prompt = f"""You are a Universal Financial Categorization AI. 
-Your job is to analyze transactions from anywhere in the world, dynamically generate a highly accurate category, and determine the cash flow direction.
+    # A comprehensive, clear financial taxonomy for accurate parsing
+    taxonomy = {
+        "Income": ["Salary", "Freelance", "Cashback", "Refund", "Investment Return", "Dividend", "Interest", "Transfer In"],
+        "Food & Dining": ["Restaurants", "Food Delivery (Swiggy, Zomato)", "Cafes", "Fast Food", "Pubs & Bars"],
+        "Groceries": ["Supermarkets", "Instamart", "Blinkit", "Zepto", "BigBasket", "Local Vendors"],
+        "Shopping": ["E-commerce (Amazon, Flipkart, Myntra)", "Apparel", "Electronics", "Home Decor"],
+        "Utilities & Bills": ["Rent", "Electricity", "Water", "Gas", "Internet", "Mobile Recharge", "Subscriptions (Netflix, OTT)"],
+        "Transport & Travel": ["Cabs (Uber, Ola, Rapido)", "Fuel (Petrol/Diesel)", "Metro", "Trains", "Flights", "Tolls"],
+        "Entertainment & Leisure": ["Movies", "Concerts", "Gaming", "Hobbies"],
+        "Health & Wellness": ["Medical", "Pharmacy", "Hospitals", "Gym", "Health Insurance"],
+        "Investment & Savings": ["Stocks", "Mutual Funds", "Gold", "Fixed Deposits"],
+        "Others": ["Miscellaneous", "Cash Withdrawals", "Unclassified Outflow"]
+    }
 
-RULES:
-1. UNIVERSAL CATEGORIES: Do NOT use a pre-set list. Use your vast global knowledge to generate the most accurate 1 to 3 word category for the transaction. 
-   - Example A: "Steam Games" -> "Gaming"
-   - Example B: "Pedigree" -> "Pet Supplies"
-   - Example C: "Traffic Fine" -> "Government Dues"
-   - Example D: "Freelance UI Design" -> "Freelance Income"
-2. FLOW DIRECTION (CRITICAL): 
-   - If money is RECEIVED by the user (Salary, Scholarship, Sold Items, Refunds, Grants), label flow as "INCOME".
-   - If money is SPENT by the user (Food, Bills, Fines, Shopping, Subscriptions), label flow as "EXPENSE".
+    prompt = f"""You are an advanced financial data processing engine running in India.
+Your task is to analyze a list of raw transaction items, infer the transaction category based on contextual intent, and determine if it is an Income or Expense.
 
-You MUST output a JSON object containing a single key "data". The value of "data" must be an array of the processed objects.
+COMPREHENSIVE TAXONOMY & EXAMPLES:
+- Food & Dining: Swiggy, Zomato, Starbucks, McDonald's, Dineout, local restaurants.
+- Groceries: Zepto, Blinkit, Instamart, BigBasket, DMart, local provision stores.
+- Shopping: Amazon, Flipkart, Myntra, Ajio, Nykaa, Zara, Nike.
+- Transport & Travel: Uber, Ola, Rapido, Makemytrip, Indigo, IRCTC, HPCL/BPCL petrol pumps.
+- Utilities & Bills: Airtel, Jio, BESCOM, Tata Play, Netflix, Spotify, Rent payments.
+- Health & Wellness: Apollo Pharmacy, 1mg, hospital bills, Cult.fit, insurance premiums.
+- Income: Salary, salary credits, dividends, bank interest, cashback payouts, customer refunds.
+- Investment & Savings: Zerodha, Groww, AngelOne, mutual fund SIPs.
+- Others: Generic UPI transfers to individuals, ATM cash withdrawals, or ambiguous descriptions.
 
-Example Output Format:
-{{
-  "data": [
-    {{"description": "Veterinary Clinic", "amount": 1200, "category": "Pet Care", "flow": "EXPENSE", "split_with": ""}},
-    {{"description": "University Scholarship", "amount": 5000, "category": "Education Grants", "flow": "INCOME", "split_with": ""}}
-  ]
-}}
+STRICT PROCESSING RULES:
+1. Deduce the most contextually relevant category from the taxonomy. Do not invent categories outside of: {list(taxonomy.keys())}.
+2. Fix the numerical sign: Expenses MUST be negative numbers. Income MUST be positive numbers. (e.g., if a user manually adds "Swiggy" with an amount of 450, output -450.0).
+3. If the description explicitly mentions "Refund" or "Received", treat it as Income (Positive amount).
+4. Return ONLY a valid JSON array of objects. Do not wrap it in any dialogue, greeting, or summary text.
 
 INPUT DATA:
+
 {json.dumps(raw_transactions)}
-"""
+
+Generate the perfectly structured JSON output now:"""
 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    
+   
     payload = {
         "model": "llama-3.3-70b-versatile",
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2, # Slightly increased so it is creative enough to invent good category names
-        "response_format": {"type": "json_object"}
+        "temperature": 0.0  # Zero temperature forces absolute determinism and consistency
     }
 
     try:
         response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=10)
-        
         if response.status_code != 200:
-            raise Exception(f"Groq API Error: {response.text}")
+            raise Exception(f"Groq API responded with code {response.status_code}")
 
         ai_content = response.json()["choices"][0]["message"]["content"]
-        
-        # Safely parse the guaranteed JSON object
-        parsed_json = json.loads(ai_content)
-        return parsed_json.get("data", [])
-        
+       
+        # Strip code block decorators if present
+        cleaned_json = re.sub(r"```json\n|\n```|```", "", ai_content).strip()
+        return json.loads(cleaned_json)
+       
     except Exception as e:
-        raise Exception(f"Categorizer failed: {str(e)}")
+        print(f"Error during AI categorization: {str(e)}")
+        raise e 
+
