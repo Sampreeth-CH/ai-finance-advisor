@@ -1,13 +1,11 @@
 import json
-import re
 import requests
 from pydantic import BaseModel
 from app.core.config import settings
 
 def smart_categorize_transactions(raw_transactions: list) -> list:
     """
-    Leverages LLaMA 3.3 to dynamically categorize transactions, detect money flow (Inflow/Outflow),
-    and assign an intelligent universal category based on world knowledge.
+    Leverages LLaMA 3.3 to dynamically categorize transactions using Native JSON mode.
     """
     api_key = settings.GROQ_API_KEY
     if not api_key:
@@ -24,19 +22,15 @@ CRITICAL CASH FLOW RULES (Determine Positive vs Negative):
    -> You MUST convert outflow amounts to negative numbers (e.g., if the user enters "Swiggy" with amount 500, you MUST output -500.0).
 
 UNIVERSAL CATEGORIZATION RULES:
-1. You are NOT restricted to a hardcoded list. Use your vast world knowledge to generate the most accurate, universally recognized category for the transaction.
-2. Keep the category name concise (1 to 3 words, Title Case). 
-   Examples of good categories: "Education", "Food & Dining", "Scholarships", "Health & Medical", "Utilities", "Transportation", "Freelance Income", "Personal Care", "Investment", "Entertainment".
-3. Group similar items intelligently (e.g., "Zomato" and "Starbucks" should both be "Food & Dining").
+1. You are NOT restricted to a hardcoded list. Use your vast world knowledge to generate the most accurate, universally recognized category.
+2. Keep the category name concise (1 to 3 words, Title Case). Examples: "Education", "Food & Dining", "Scholarships", "Health & Medical", "Utilities".
 
 OUTPUT FORMAT:
-Return ONLY a valid JSON array of objects with keys: "description", "amount", "category", "split_with".
-Do not wrap it in any dialogue, greeting, markdown tags, or summary text.
+You MUST respond in pure JSON format. Return a JSON object containing a single key called "transactions" which holds the array of processed transaction objects. Each object must have keys: "description", "amount", "category", "split_with".
 
 INPUT DATA:
 {json.dumps(raw_transactions)}
-
-Generate the perfectly structured JSON output now:"""
+"""
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -46,19 +40,23 @@ Generate the perfectly structured JSON output now:"""
     payload = {
         "model": "llama-3.3-70b-versatile",
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.1  # Low temperature for highly logical deduction
+        "temperature": 0.0,  # Zero temperature for strictly logical parsing
+        "response_format": {"type": "json_object"} # <--- THE FIX: Forces absolute pure JSON
     }
 
     try:
         response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=10)
+        
         if response.status_code != 200:
-            raise Exception(f"Groq API responded with code {response.status_code}")
+            raise Exception(f"Groq API Error: {response.text}")
 
         ai_content = response.json()["choices"][0]["message"]["content"]
         
-        # Strip code block decorators if present
-        cleaned_json = re.sub(r"```json\n|\n```|```", "", ai_content).strip()
-        return json.loads(cleaned_json)
+        # We can now safely parse the guaranteed JSON object
+        parsed_data = json.loads(ai_content)
+        
+        # Return the array inside the "transactions" key
+        return parsed_data.get("transactions", [])
         
     except Exception as e:
         print(f"Error during AI categorization: {str(e)}")
