@@ -38,6 +38,10 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.transaction import Transaction
 from app.models.user import User
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
+from pydantic import BaseModel
 
 print(settings.APP_NAME)
 
@@ -227,71 +231,49 @@ async def add_manual_transactions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # 1. Send exactly what the user typed to the AI
+    # 1. Force the amounts to be positive before sending to AI
     raw_data = [
         {
             "description": tx.Description, 
-            "amount": tx.Amount, 
+            "amount": abs(tx.Amount), 
             "split_with": tx.SplitWith
         } for tx in transactions
     ]
     
     try:
-        # 2. Run advanced classification
+        # 2. Get the dynamically categorized data from the AI
         smart_results = smart_categorize_transactions(raw_data)
         
         for item in smart_results:
-            desc = item.get("description", item.get("Description", "Unknown"))
+            desc = item.get("description", "Unknown")
+            raw_amt = float(item.get("amount", 0))
+            cat = item.get("category", "Others")
             
-            # --- THE FIX ---
-            # The AI already added the correct negative or positive sign, so we just save it directly!
-            amt = float(item.get("amount", item.get("Amount", 0)))
-            cat = item.get("category", item.get("Category", "Others"))
+            # 3. Read the flow label the AI generated
+            flow = str(item.get("flow", "EXPENSE")).upper()
             
+            # 4. Python safely enforces the math signs
+            if flow == "INCOME":
+                final_amt = abs(raw_amt)   # Forces POSITIVE
+            else:
+                final_amt = -abs(raw_amt)  # Forces NEGATIVE
+                
             new_tx = Transaction(
                 user_id=current_user.id,
                 description=desc,
-                amount=amt,
+                amount=final_amt,
                 category=cat,
                 date=datetime.utcnow()
             )
             db.add(new_tx)
             
         await db.commit()
-        return {"status": "success", "message": "Transactions accurately categorized and committed."}
+        return {"status": "success", "message": "Transactions saved dynamically and perfectly!"}
         
-    except Exception as ai_exception:
-        print(f"AI classification failed, running traditional fallback rules: {ai_exception}")
-        
-        # 3. Fallback layer protects data if Groq API goes offline
-        for tx in transactions:
-            desc_lower = tx.Description.lower()
-            
-            # Smart fallback patterns
-            if "scholarship" in desc_lower or "salary" in desc_lower or "refund" in desc_lower:
-                category = "Income"
-                amount = abs(tx.Amount)  # Ensure it is positive
-            elif "swiggy" in desc_lower or "zomato" in desc_lower:
-                category = "Food & Dining"
-                amount = -abs(tx.Amount) # Ensure it is negative
-            else:
-                category = "Others"
-                amount = -abs(tx.Amount) # Defaulting safely to outflow
-                
-            fallback_tx = Transaction(
-                user_id=current_user.id,
-                description=tx.Description,
-                amount=amount,
-                category=category,
-                date=datetime.utcnow()
-            )
-            db.add(fallback_tx)
-            
-        await db.commit()
-        return {
-            "status": "fallback", 
-            "message": "Transactions saved using local rules due to AI timeout."
-        }
+    except Exception as e:
+        # SHOW THE ERROR! If it fails, this will pop up in your app/terminal.
+        print(f"CRITICAL ERROR: {str(e)}")
+        return {"status": "error", "message": f"CRITICAL ERROR: {str(e)}"}
 
 @app.delete("/clear/")
 async def clear_all_transactions(
