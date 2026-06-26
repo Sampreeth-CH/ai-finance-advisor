@@ -220,11 +220,6 @@ async def upload_file(
         "insights": insights
     }
 
-class ManualTransaction(BaseModel):
-    Description: str
-    Amount: float
-    SplitWith: str = ""
-
 @app.post("/manual/")
 async def add_manual_transactions(
     transactions: list[ManualTransaction],
@@ -239,51 +234,56 @@ async def add_manual_transactions(
             "split_with": tx.SplitWith
         } for tx in transactions
     ]
-   
+    
     try:
         # Run advanced classification
         smart_results = smart_categorize_transactions(raw_data)
-       
+        
         for item in smart_results:
             desc = item.get("description", item.get("Description", "Unknown"))
             amt = item.get("amount", item.get("Amount", 0))
             cat = item.get("category", item.get("Category", "Others"))
-           
+            
+            # --- THE FIX: We must extract 'split_with' and save it! ---
+            split = item.get("split_with", item.get("SplitWith", ""))
+            
             new_tx = Transaction(
                 user_id=current_user.id,
                 description=desc,
                 amount=float(amt),
                 category=cat,
+                split_with=split,  # <--- THIS IS WHAT MAKES SHARED WALLETS WORK!
                 date=datetime.utcnow()
             )
             db.add(new_tx)
-           
+            
         await db.commit()
         return {"status": "success", "message": "Transactions accurately categorized and committed."}
-       
+        
     except Exception as ai_exception:
         print(f"AI classification failed, running traditional fallback rules: {ai_exception}")
-       
+        
         # Fallback layer protects workflow continuity
         for tx in transactions:
             desc_lower = tx.Description.lower()
-           
+            
             # Simple fallback patterns
             if "swiggy" in desc_lower or "zomato" in desc_lower:
                 category = "Food & Dining"
                 amount = -abs(tx.Amount)
-            elif "salary" in desc_lower or "refund" in desc_lower:
+            elif "scholarship" in desc_lower or "salary" in desc_lower or "refund" in desc_lower:
                 category = "Income"
                 amount = abs(tx.Amount)
             else:
                 category = "Others"
-                amount = -abs(tx.Amount)  # Defaulting safely to outflow for safety
-               
+                amount = -abs(tx.Amount)  # Defaulting safely to outflow
+                
             fallback_tx = Transaction(
                 user_id=current_user.id,
                 description=tx.Description,
                 amount=amount,
                 category=category,
+                split_with=tx.SplitWith, # <--- ALSO FIXED IN THE FALLBACK!
                 date=datetime.utcnow()
             )
             db.add(fallback_tx)
@@ -293,8 +293,6 @@ async def add_manual_transactions(
             "status": "fallback",
             "message": "Transactions saved using local rules due to temporary processing overload."
         }
-
-    
 
 
 @app.delete("/clear/")
