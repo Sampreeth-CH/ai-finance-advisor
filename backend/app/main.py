@@ -232,52 +232,52 @@ async def add_manual_transactions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # 1. Prepare data for AI - we don't even send 'split_with' to the AI anymore!
-    raw_data = [
-        {
-            "description": tx.Description,
-            "amount": tx.Amount
-        } for tx in transactions
-    ]
-    
     try:
         from app.services.categorizer import smart_categorize_transactions
         
-        # 2. Run AI classification
-        smart_results = smart_categorize_transactions(raw_data)
+        # 1. Extract ONLY the text descriptions to send to the AI
+        descriptions = [tx.Description for tx in transactions]
         
-        # 3. Use 'enumerate' to match the AI's answer with your exact input row!
-        for index, item in enumerate(smart_results):
-            desc = item.get("description", item.get("Description", "Unknown"))
-            amt = item.get("amount", item.get("Amount", 0))
-            cat = item.get("category", item.get("Category", "Others"))
+        # 2. Get the AI "Dictionary" mapping back
+        # Example: {"swiggy": {"category": "Food", "flow": "EXPENSE"}}
+        ai_dictionary = smart_categorize_transactions(descriptions)
+        
+        # 3. Python safely builds the database objects one by one
+        for tx in transactions:
+            desc_lower = tx.Description.lower()
             
-            # --- THE SHARED WALLETS FIX ---
-            # Instead of asking the AI, we pull the exact name YOU typed from the original frontend data!
-            # It is physically impossible for this to get deleted now.
-            exact_split_name = transactions[index].SplitWith
+            # Look up the AI's answer, default to "Others" if the AI missed it
+            ai_answer = ai_dictionary.get(desc_lower, {"category": "Others", "flow": "EXPENSE"})
             
+            cat = ai_answer.get("category", "Others")
+            flow = str(ai_answer.get("flow", "EXPENSE")).upper()
+            
+            # Python enforces the math!
+            if flow == "INCOME":
+                final_amt = abs(tx.Amount)
+            else:
+                final_amt = -abs(tx.Amount)
+                
             new_tx = Transaction(
                 user_id=current_user.id,
-                description=desc,
-                amount=float(amt),
-                category=cat,
-                split_with=exact_split_name,  # <--- PERFECTLY SAVED!
+                description=tx.Description,   # 100% exactly what you typed
+                amount=final_amt,             # Math perfectly enforced
+                category=cat,                 # AI selected category
+                split_with=tx.SplitWith,      # <--- 100% GUARANTEED TO SAVE FOR SHARED WALLETS
                 date=datetime.utcnow()
             )
             db.add(new_tx)
             
         await db.commit()
-        return {"status": "success", "message": "Transactions accurately categorized and committed."}
+        return {"status": "success", "message": "Transactions saved dynamically and perfectly!"}
         
-    except Exception as ai_exception:
-        print(f"AI classification failed, running traditional fallback rules: {ai_exception}")
+    except Exception as e:
+        print(f"CRITICAL ERROR: {str(e)}")
         
         # Fallback layer protects workflow continuity
         for tx in transactions:
             desc_lower = tx.Description.lower()
             
-            # Simple fallback patterns
             if "swiggy" in desc_lower or "zomato" in desc_lower:
                 category = "Food & Dining"
                 amount = -abs(tx.Amount)
@@ -293,7 +293,7 @@ async def add_manual_transactions(
                 description=tx.Description,
                 amount=amount,
                 category=category,
-                split_with=tx.SplitWith, # <--- Perfectly saved in fallback too!
+                split_with=tx.SplitWith, # Guaranteed fallback save!
                 date=datetime.utcnow()
             )
             db.add(fallback_tx)
@@ -301,7 +301,7 @@ async def add_manual_transactions(
         await db.commit()
         return {
             "status": "fallback",
-            "message": "Transactions saved using local rules due to temporary processing overload."
+            "message": f"Transactions saved using fallback due to error: {str(e)}"
         }
 
 
