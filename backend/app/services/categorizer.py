@@ -4,7 +4,7 @@ from app.core.config import settings
 
 def smart_categorize_transactions(descriptions: list) -> dict:
     """
-    Acts purely as a Category Dictionary. Takes a list of strings and returns their categories.
+    Acts purely as a Category Dictionary. Takes a list of strings and returns their categories, flow, and extracted names.
     """
     api_key = settings.GROQ_API_KEY
     if not api_key:
@@ -12,17 +12,18 @@ def smart_categorize_transactions(descriptions: list) -> dict:
 
     prompt = f"""You are a Universal Financial Categorization Dictionary.
 I will give you a list of transaction descriptions. 
-You must return a JSON dictionary where the KEY is the exact description I gave you, and the VALUE is an object with 'category' and 'flow'.
+You must return a JSON dictionary where the KEY is the exact description I gave you, and the VALUE is an object with 'category', 'flow', and 'extracted_name'.
 
 RULES:
 1. FLOW: "INCOME" (Money received, e.g., Salary, Refund) or "EXPENSE" (Money spent, e.g., Food, Shopping).
 2. CATEGORY: Invent a highly accurate 1-3 word category.
+3. EXTRACTED NAME (CRITICAL): If the description implies a shared expense or mentions a person (e.g., "party Rahul", "Dinner with Sarah"), extract the person's name (e.g., "Rahul", "Sarah"). If no person is mentioned, leave it as "".
 
 EXAMPLE OUTPUT FORMAT:
 {{
-  "Swiggy": {{"category": "Food & Dining", "flow": "EXPENSE"}},
-  "University Scholarship": {{"category": "Education Grants", "flow": "INCOME"}},
-  "Dad sent money": {{"category": "Family Allowance", "flow": "INCOME"}}
+  "party Rahul": {{"category": "Entertainment", "flow": "EXPENSE", "extracted_name": "Rahul"}},
+  "Swiggy": {{"category": "Food & Dining", "flow": "EXPENSE", "extracted_name": ""}},
+  "Dad sent money": {{"category": "Family Allowance", "flow": "INCOME", "extracted_name": "Dad"}}
 }}
 
 INPUT DESCRIPTIONS:

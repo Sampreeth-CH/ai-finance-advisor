@@ -20,21 +20,21 @@ def analyze_finances(df):
 
     total_spent = abs(expenses)
 
-    # --- THE SHARED WALLETS FIX ---
+    # --- THE BULLETPROOF SHARED WALLETS FIX ---
     splits_summary = {}
     
-    # Check if the split column exists in your DataFrame (it might be 'split_with' or 'SplitWith')
-    split_col = None
-    if "split_with" in df.columns:
-        split_col = "split_with"
-    elif "SplitWith" in df.columns:
-        split_col = "SplitWith"
+    # Safely find the exact column name
+    split_col = "split_with" if "split_with" in df.columns else "SplitWith" if "SplitWith" in df.columns else None
 
     if split_col:
-        # 1. Filter out all transactions that DO NOT have a split name
-        split_df = df[df[split_col].notna() & (df[split_col] != "") & (df[split_col].str.strip() != "")]
+        # 1. THE CRITICAL FIX: Force the column to be strings and replace NaN/Nulls with ""
+        # This prevents Pandas from crashing when it reads empty database cells!
+        df[split_col] = df[split_col].fillna("").astype(str)
         
-        # 2. Calculate who owes you what (assuming 50/50 split on expenses)
+        # 2. Filter out all transactions that DO NOT have a split name
+        split_df = df[df[split_col].str.strip() != ""]
+        
+        # 3. Calculate who owes you what (assuming 50/50 split on expenses)
         for _, row in split_df.iterrows():
             person = str(row[split_col]).strip().title() # .title() makes "rahul" into "Rahul"
             amount = float(row["Amount"])
@@ -51,5 +51,5 @@ def analyze_finances(df):
         "total_income": income,
         "total_expense": total_spent,
         "category_spending": category_spending,
-        "splits": splits_summary  # <--- THIS IS WHAT WAKES UP YOUR SHARED WALLETS PAGE!
+        "splits": splits_summary
     }

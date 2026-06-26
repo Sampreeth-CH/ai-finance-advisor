@@ -246,7 +246,6 @@ async def add_manual_transactions(
         descriptions = [tx.Description for tx in transactions]
         
         # 2. Get the AI "Dictionary" mapping back
-        # Example: {"swiggy": {"category": "Food", "flow": "EXPENSE"}}
         ai_dictionary = smart_categorize_transactions(descriptions)
         
         # 3. Python safely builds the database objects one by one
@@ -254,10 +253,18 @@ async def add_manual_transactions(
             desc_lower = tx.Description.lower()
             
             # Look up the AI's answer, default to "Others" if the AI missed it
-            ai_answer = ai_dictionary.get(desc_lower, {"category": "Others", "flow": "EXPENSE"})
+            ai_answer = ai_dictionary.get(desc_lower, {"category": "Others", "flow": "EXPENSE", "extracted_name": ""})
             
             cat = ai_answer.get("category", "Others")
             flow = str(ai_answer.get("flow", "EXPENSE")).upper()
+            
+            # Capitalizes the extracted name (e.g., "rahul" -> "Rahul")
+            ai_extracted_name = str(ai_answer.get("extracted_name", "")).title()
+            
+            # --- THE MAGIC NAME LOGIC ---
+            # If the user typed a name in the Split With box, use it. 
+            # Otherwise, use the name the AI extracted from the description!
+            final_split_name = tx.SplitWith if tx.SplitWith.strip() != "" else ai_extracted_name
             
             # Python enforces the math!
             if flow == "INCOME":
@@ -267,10 +274,10 @@ async def add_manual_transactions(
                 
             new_tx = Transaction(
                 user_id=current_user.id,
-                description=tx.Description,   # 100% exactly what you typed
-                amount=final_amt,             # Math perfectly enforced
-                category=cat,                 # AI selected category
-                split_with=tx.SplitWith,      # <--- 100% GUARANTEED TO SAVE FOR SHARED WALLETS
+                description=tx.Description,
+                amount=final_amt,
+                category=cat,
+                split_with=final_split_name,  # <--- SAVES THE SMART NAME!
                 date=datetime.utcnow()
             )
             db.add(new_tx)
