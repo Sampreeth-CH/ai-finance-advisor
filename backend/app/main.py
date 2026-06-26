@@ -220,47 +220,49 @@ async def upload_file(
         "insights": insights
     }
 
+# Make sure your ManualTransaction class is right above the endpoint like we fixed earlier:
 class ManualTransaction(BaseModel):
     Description: str
     Amount: float
     SplitWith: str = ""
 
-# 2. The upgraded endpoint with the Shared Wallets fix
 @app.post("/manual/")
 async def add_manual_transactions(
     transactions: list[ManualTransaction],
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Prepare payload format for the AI model
+    # 1. Prepare data for AI - we don't even send 'split_with' to the AI anymore!
     raw_data = [
         {
             "description": tx.Description,
-            "amount": tx.Amount,
-            "split_with": tx.SplitWith
+            "amount": tx.Amount
         } for tx in transactions
     ]
     
     try:
         from app.services.categorizer import smart_categorize_transactions
         
-        # Run advanced classification
+        # 2. Run AI classification
         smart_results = smart_categorize_transactions(raw_data)
         
-        for item in smart_results:
+        # 3. Use 'enumerate' to match the AI's answer with your exact input row!
+        for index, item in enumerate(smart_results):
             desc = item.get("description", item.get("Description", "Unknown"))
             amt = item.get("amount", item.get("Amount", 0))
             cat = item.get("category", item.get("Category", "Others"))
             
-            # --- SHARED WALLETS FIX ---
-            split = item.get("split_with", item.get("SplitWith", ""))
+            # --- THE SHARED WALLETS FIX ---
+            # Instead of asking the AI, we pull the exact name YOU typed from the original frontend data!
+            # It is physically impossible for this to get deleted now.
+            exact_split_name = transactions[index].SplitWith
             
             new_tx = Transaction(
                 user_id=current_user.id,
                 description=desc,
                 amount=float(amt),
                 category=cat,
-                split_with=split,  # Required for shared wallets!
+                split_with=exact_split_name,  # <--- PERFECTLY SAVED!
                 date=datetime.utcnow()
             )
             db.add(new_tx)
@@ -284,14 +286,14 @@ async def add_manual_transactions(
                 amount = abs(tx.Amount)
             else:
                 category = "Others"
-                amount = -abs(tx.Amount)  # Defaulting safely to outflow
+                amount = -abs(tx.Amount)
                 
             fallback_tx = Transaction(
                 user_id=current_user.id,
                 description=tx.Description,
                 amount=amount,
                 category=category,
-                split_with=tx.SplitWith, # Required for shared wallets fallback!
+                split_with=tx.SplitWith, # <--- Perfectly saved in fallback too!
                 date=datetime.utcnow()
             )
             db.add(fallback_tx)
