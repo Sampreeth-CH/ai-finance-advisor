@@ -145,7 +145,6 @@ async def upload_file(
     import os
     import shutil
     from datetime import datetime
-    # --- CHANGED: Import the new Groq AI categorizer instead of the old ML model ---
     from app.services.categorizer import smart_categorize_transactions 
     
     file_path = os.path.join(UPLOAD_DIR, file.filename)
@@ -161,60 +160,68 @@ async def upload_file(
         else:
             return {"error": "Unsupported file format"}
 
-        # --- STEP 1: Pack ALL rows into a single list (Batching) ---
-        raw_data = []
-        for index, row in df.iterrows():
-            raw_data.append({
-                "description": str(row.get("Description", "")),
-                "amount": float(row.get("Amount", 0)),
-                "split_with": ""
-            })
+        # --- 1. DICTIONARY ARCHITECTURE SETUP ---
+        # Extract ONLY the text descriptions from the file to send to the AI
+        raw_descriptions = df["Description"].astype(str).tolist()
 
-        # --- STEP 2: Send the entire bank statement to LLaMA in ONE fast API call ---
-        # (This prevents Groq from blocking you for rate limiting!)
         try:
-            smart_results = smart_categorize_transactions(raw_data)
+            # 2. Get the AI "Dictionary" mapping back
+            # Example: {"swiggy onl-line bangalore": {"category": "Food & Dining", "flow": "EXPENSE"}}
+            ai_dictionary = smart_categorize_transactions(raw_descriptions)
         except Exception as ai_e:
             print(f"AI Batch Categorization Failed: {ai_e}")
-            # If AI fails, use a safe fallback so the user doesn't lose their upload
-            smart_results = [{"description": tx["description"], "amount": -abs(tx["amount"]), "category": "Others"} for tx in raw_data]
+            ai_dictionary = {} # Fallback to an empty dictionary so it doesn't crash
 
-        # --- STEP 3: Save to Database and update the DataFrame live ---
-        # Assuming the AI returns the list in the same order we sent it
-        for index, item in enumerate(smart_results):
-            # Extract safe values
-            desc = item.get("description", item.get("Description", raw_data[index]["description"]))
-            amt = float(item.get("amount", item.get("Amount", raw_data[index]["amount"])))
-            cat = item.get("category", item.get("Category", "Others"))
+        # 3. Process every row in the PDF/CSV using Python for the math
+        for index, row in df.iterrows():
+            original_desc = str(row.get("Description", "Unknown"))
+            original_amount = float(row.get("Amount", 0))
+            
+            # Look up the AI's answer in the dictionary
+            desc_lower = original_desc.lower()
+            ai_answer = ai_dictionary.get(desc_lower, {"category": "Others", "flow": "EXPENSE"})
+            
+            cat = ai_answer.get("category", "Others")
+            flow = str(ai_answer.get("flow", "EXPENSE")).upper()
 
+            # Python strictly enforces the math signs!
+            if flow == "INCOME":
+                final_amt = abs(original_amount)
+            else:
+                final_amt = -abs(original_amount)
+
+            # Save to Database
             new_tx = Transaction(
-                amount=amt, 
-                description=desc,
+                amount=final_amt, 
+                description=original_desc,
                 category=cat, 
+                split_with="",  # Statements usually don't have split names
                 date=datetime.utcnow(), 
                 user_id=current_user.id
             )
             db.add(new_tx)
             
-            # Update the DataFrame live so the analyzer gets the corrected AI data
-            df.at[index, "Amount"] = amt
+            # Update the DataFrame live so the dashboard charts get the corrected AI data
+            df.at[index, "Amount"] = final_amt
             df.at[index, "Category"] = cat
         
         await db.commit()
         
-        # --- STEP 4: Analyze using the perfectly categorized and signed data ---
+        # --- 4. Analyze using the perfectly categorized and signed data ---
         analysis = analyze_finances(df)
         total_income = analysis.get("total_income", 0)
         total_expense = analysis.get("total_expense", 0)
         analysis["net_allocation"] = total_income - total_expense
         
+        # Generate the insights for the AI Copilot page
         insights = generate_ai_insights_llm(analysis)
 
     except Exception as e:
+        print(f"Upload API crashed: {str(e)}")
         return {"error": str(e)}
 
     return {
-        "message": "File processed and transactions saved to database successfully!",
+        "message": "File processed and transactions saved dynamically and perfectly!",
         "filename": file.filename,
         "analysis": analysis,
         "insights": insights
