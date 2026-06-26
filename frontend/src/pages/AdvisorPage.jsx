@@ -14,7 +14,6 @@ import {
 import ReactMarkdown from 'react-markdown'
 
 const AdvisorPage = () => {
-  // --- THE FIX: We must pull 'language' from useAppStore here! ---
   const { dashboardData, fetchDashboard, language } = useAppStore()
 
   const [activePersona, setActivePersona] = useState('professional')
@@ -27,16 +26,23 @@ const AdvisorPage = () => {
     },
   ])
   const [isTyping, setIsTyping] = useState(false)
-  const chatEndRef = useRef(null)
+
+  // --- THE FIX: Create a ref for the entire scrollable container ---
+  const chatContainerRef = useRef(null)
 
   useEffect(() => {
     fetchDashboard()
   }, [fetchDashboard])
 
-  // Auto-scroll chat to bottom
+  // --- THE FIX: Target the container's internal scrollbar directly ---
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatHistory])
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth',
+      })
+    }
+  }, [chatHistory, isTyping]) // Added isTyping so it auto-scrolls when loading dots appear
 
   const ai_advisor = dashboardData?.ai_advisor
 
@@ -81,7 +87,6 @@ const AdvisorPage = () => {
         message: userMsg,
         history: chatHistory.slice(-4),
         persona: activePersona,
-        // --- THE FIX: Send the language to the backend safely ---
         language: language || 'English',
       })
 
@@ -217,7 +222,10 @@ const AdvisorPage = () => {
           </div>
 
           {/* Chat History */}
-          <div className='flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar'>
+          <div
+            ref={chatContainerRef} // <-- THE FIX: Attached ref to the container
+            className='flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar'
+          >
             {chatHistory.map((msg, idx) => (
               <div
                 key={idx}
@@ -251,7 +259,7 @@ const AdvisorPage = () => {
                 </div>
               </div>
             )}
-            <div ref={chatEndRef} />
+            {/* THE FIX: Removed the empty <div ref={chatEndRef} /> from here */}
           </div>
 
           {/* Chat Input */}
