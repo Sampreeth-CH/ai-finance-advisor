@@ -220,6 +220,12 @@ async def upload_file(
         "insights": insights
     }
 
+class ManualTransaction(BaseModel):
+    Description: str
+    Amount: float
+    SplitWith: str = ""
+
+# 2. The upgraded endpoint with the Shared Wallets fix
 @app.post("/manual/")
 async def add_manual_transactions(
     transactions: list[ManualTransaction],
@@ -236,6 +242,8 @@ async def add_manual_transactions(
     ]
     
     try:
+        from app.services.categorizer import smart_categorize_transactions
+        
         # Run advanced classification
         smart_results = smart_categorize_transactions(raw_data)
         
@@ -244,7 +252,7 @@ async def add_manual_transactions(
             amt = item.get("amount", item.get("Amount", 0))
             cat = item.get("category", item.get("Category", "Others"))
             
-            # --- THE FIX: We must extract 'split_with' and save it! ---
+            # --- SHARED WALLETS FIX ---
             split = item.get("split_with", item.get("SplitWith", ""))
             
             new_tx = Transaction(
@@ -252,7 +260,7 @@ async def add_manual_transactions(
                 description=desc,
                 amount=float(amt),
                 category=cat,
-                split_with=split,  # <--- THIS IS WHAT MAKES SHARED WALLETS WORK!
+                split_with=split,  # Required for shared wallets!
                 date=datetime.utcnow()
             )
             db.add(new_tx)
@@ -283,7 +291,7 @@ async def add_manual_transactions(
                 description=tx.Description,
                 amount=amount,
                 category=category,
-                split_with=tx.SplitWith, # <--- ALSO FIXED IN THE FALLBACK!
+                split_with=tx.SplitWith, # Required for shared wallets fallback!
                 date=datetime.utcnow()
             )
             db.add(fallback_tx)
