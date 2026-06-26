@@ -2,43 +2,33 @@ import json
 import requests
 from app.core.config import settings
 
-def smart_categorize_transactions(raw_transactions: list) -> list:
+def smart_categorize_transactions(descriptions: list) -> dict:
     """
-    Leverages LLaMA 3.3 to dynamically categorize transactions, detect type,
-    and normalize mathematical signs using pure JSON mode.
+    Acts purely as a Category Dictionary. Takes a list of strings and returns their categories.
     """
     api_key = settings.GROQ_API_KEY
     if not api_key:
         raise Exception("Groq API Key is missing from configuration.")
 
-    # EXPANDED TAXONOMY with explicit Income/Expense mapping
-    taxonomy_guide = {
-        "Income (Positive)": ["Salary", "Freelance", "Scholarship", "Cashback", "Refund", "Pocket Money", "Government Grant", "Sold Items", "Dividend", "Interest"],
-        "Food & Dining (Negative)": ["Restaurants", "Swiggy", "Zomato", "Cafes", "Groceries", "Supermarkets", "Snacks"],
-        "Shopping (Negative)": ["Amazon", "Flipkart", "Apparel", "Electronics", "Fashion", "Home Decor"],
-        "Utilities & Bills (Negative)": ["Rent", "Electricity", "Internet", "Recharge", "Subscriptions", "Netflix", "Water Bill", "Gas"],
-        "Transport & Travel (Negative)": ["Cabs", "Uber", "Petrol", "Flights", "Metro", "Train Tickets", "Tolls"],
-        "Health & Education (Negative)": ["Pharmacy", "Hospital", "School Fees", "Tuition", "Courses", "Gym", "Health Insurance"],
-        "Personal & Family (Negative)": ["Pet Care", "Childcare", "Gifts", "Charity", "Personal Care", "Haircut"],
-        "Finance & Taxes (Negative)": ["Taxes", "Credit Card Bill", "EMI", "Loan Repayment", "Bank Fees", "Insurance Premium"]
-    }
+    prompt = f"""You are a Universal Financial Categorization Dictionary.
+I will give you a list of transaction descriptions. 
+You must return a JSON dictionary where the KEY is the exact description I gave you, and the VALUE is an object with 'category' and 'flow'.
 
-    prompt = f"""You are an advanced financial data processing engine.
-Analyze this list of raw transactions. Infer the category, determine if it is an INCOME or EXPENSE, and fix the math sign.
+RULES:
+1. FLOW: "INCOME" (Money received, e.g., Salary, Refund) or "EXPENSE" (Money spent, e.g., Food, Shopping).
+2. CATEGORY: Invent a highly accurate 1-3 word category.
 
-TAXONOMY GUIDE:
-{json.dumps(taxonomy_guide, indent=2)}
+EXAMPLE OUTPUT FORMAT:
+{{
+  "Swiggy": {{"category": "Food & Dining", "flow": "EXPENSE"}},
+  "University Scholarship": {{"category": "Education Grants", "flow": "INCOME"}},
+  "Dad sent money": {{"category": "Family Allowance", "flow": "INCOME"}}
+}}
 
-STRICT RULES:
-1. CATEGORY: Map to the closest category above. If it doesn't fit ANY of them, dynamically invent a highly accurate 1-3 word category.
-2. MATH SIGNS (CRITICAL):
-   - INCOME = POSITIVE amount (e.g., 5000). Money entering the pocket.
-   - EXPENSE = NEGATIVE amount (e.g., -450). Money leaving the pocket.
-3. SPLIT WITH: You MUST retain the exact "split_with" value provided in the input. Do not delete it.
-4. FORMAT: You MUST return a pure JSON object containing a "transactions" array.
+INPUT DESCRIPTIONS:
+{json.dumps(descriptions)}
 
-INPUT DATA:
-{json.dumps(raw_transactions)}
+Return ONLY the JSON dictionary object.
 """
 
     headers = {
@@ -50,19 +40,22 @@ INPUT DATA:
         "model": "llama-3.3-70b-versatile",
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.0,
-        "response_format": {"type": "json_object"} # FORCES BULLETPROOF JSON
+        "response_format": {"type": "json_object"}
     }
 
     try:
         response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=10)
+        
         if response.status_code != 200:
             raise Exception(f"Groq API Error: {response.text}")
 
         ai_content = response.json()["choices"][0]["message"]["content"]
-        
         parsed_json = json.loads(ai_content)
-        return parsed_json.get("transactions", parsed_json.get("data", []))
+        
+        # Convert all keys to lowercase so Python can match them perfectly later
+        lowercase_dict = {str(k).lower(): v for k, v in parsed_json.items()}
+        return lowercase_dict
         
     except Exception as e:
-        print(f"Error during AI categorization: {str(e)}")
+        print(f"Categorizer failed: {str(e)}")
         raise e
