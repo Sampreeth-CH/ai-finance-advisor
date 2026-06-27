@@ -509,6 +509,87 @@ If {payload.language} is Hindi, write strictly in Devanagari script.
 
 
 
+
+import base64
+import json
+import requests
+from fastapi import UploadFile, File
+
+@app.post("/scan-receipt/")
+async def scan_receipt(file: UploadFile = File(...)):
+    """
+    Takes an image, sends it to LLaMA Vision, and extracts Merchant + Amount.
+    """
+    api_key = settings.GROQ_API_KEY
+    if not api_key:
+        return {"error": "Groq API key missing"}
+
+    try:
+        # 1. Read and encode the image so the AI can "see" it
+        contents = await file.read()
+        base64_image = base64.b64encode(contents).decode('utf-8')
+        image_url = f"data:{file.content_type};base64,{base64_image}"
+
+        # 2. Ask LLaMA Vision to read the receipt
+        prompt = """You are an elite Receipt Scanner AI. 
+Look at this image and extract two things:
+1. The merchant/store name.
+2. The final total amount paid (as a number).
+
+You MUST return ONLY a valid JSON object exactly like this:
+{"merchant": "Starbucks", "amount": 450.50}
+
+Do not include any markdown, backticks, or conversational text."""
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        # We use the specific Vision model here!
+        payload = {
+            "model": "llama-3.2-11b-vision-preview",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": image_url}}
+                    ]
+                }
+            ],
+            "temperature": 0.0
+        }
+
+        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=15)
+        
+        if response.status_code != 200:
+            raise Exception(f"Vision API Error: {response.text}")
+
+        # 3. Clean and parse the AI's answer
+        ai_content = response.json()["choices"][0]["message"]["content"]
+        
+        # Safely extract JSON in case the AI added backticks
+        start_idx = ai_content.find('{')
+        end_idx = ai_content.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            clean_json = ai_content[start_idx:end_idx+1]
+        else:
+            clean_json = ai_content
+            
+        data = json.loads(clean_json)
+        
+        return {
+            "merchant": data.get("merchant", "Unknown Merchant"),
+            "amount": data.get("amount", 0)
+        }
+
+    except Exception as e:
+        print(f"Receipt scan failed: {str(e)}")
+        return {"error": "Failed to read receipt"}
+
+
+
 from fastapi import HTTPException
 from sqlalchemy import select
 # Ensure your Transaction model is imported at the top of your file, e.g.:
