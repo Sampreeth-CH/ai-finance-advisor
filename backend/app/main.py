@@ -686,8 +686,11 @@ async def get_forecast(
         "warning": warning
     }
 
+from datetime import datetime, timedelta
 
-# --- NEW: Subscription Sniper Engine ---
+# ==========================================
+# 1. SUBSCRIPTION SNIPER ENGINE
+# ==========================================
 @app.get("/subscriptions/")
 async def get_subscriptions(
     db: AsyncSession = Depends(get_db),
@@ -701,46 +704,50 @@ async def get_subscriptions(
     if not raw_history:
         return {"subscriptions": [], "total_monthly": 0, "yearly_drain": 0}
 
-    # Convert to DataFrame
-    data = [{"Description": tx.description, "Amount": tx.amount, "Date": tx.date} for tx in raw_history]
+    data = [{"Description": tx.description, "Amount": tx.amount, "Date": tx.date, "Category": tx.category} for tx in raw_history]
     df = pd.DataFrame(data)
     
-    # Filter only expenses (negative amounts)
+    # Filter only expenses
     expenses = df[df['Amount'] < 0].copy()
-    
     if expenses.empty:
         return {"subscriptions": [], "total_monthly": 0, "yearly_drain": 0}
     
-    # Normalize descriptions (e.g., "Netflix Premium" -> "netflix")
-    # This strips out random numbers or IDs banks attach to transactions
+    # --- SMART NORMALIZATION ---
     def normalize_name(desc):
         name = str(desc).lower()
-        name = re.sub(r'[^a-z\s]', '', name) # Keep only letters
-        # Grab the most prominent word (usually the company name)
+        # 1. Keep only letters
+        name = re.sub(r'[^a-z\s]', ' ', name) 
+        
+        # 2. Filter out Indian banking noise words
+        noise = ['upi', 'pos', 'neft', 'rtgs', 'nach', 'ach', 'razorpay', 'payu', 'payment', 'to', 'from', 'via', 'card', 'txn']
         words = name.split()
-        return words[0] if words else "unknown"
+        clean_words = [w for w in words if w not in noise and len(w) > 2]
+        
+        # 3. Return the first two meaningful words (e.g., "amazon prime")
+        return " ".join(clean_words[:2]) if clean_words else "unknown"
 
     expenses['Normalized'] = expenses['Description'].apply(normalize_name)
     
-    # Group by normalized name
     grouped = expenses.groupby('Normalized').agg(
         Count=('Amount', 'size'),
         AvgAmount=('Amount', 'mean'),
         LastDate=('Date', 'max'),
-        OriginalName=('Description', 'first')
+        OriginalName=('Description', 'first'),
+        Category=('Category', 'first')
     ).reset_index()
     
-    # Logic: If it happens 2+ times, we assume it's a recurring charge/subscription
-    subs_df = grouped[grouped['Count'] >= 2].copy()
+    # --- SUBSCRIPTION LOGIC ---
+    # It must happen 2+ times OR be explicitly categorized by the AI as a Bill/Subscription
+    subs_df = grouped[
+        (grouped['Count'] >= 2) & 
+        (~grouped['Category'].isin(['Food & Dining', 'Groceries', 'Shopping'])) # Ignore daily food/shopping habits
+    ].copy()
     
-    # Convert amounts to positive numbers for the UI
     subs_df['AvgAmount'] = subs_df['AvgAmount'].abs()
     
-    # Calculate totals
     total_monthly = float(subs_df['AvgAmount'].sum())
     yearly_drain = total_monthly * 12
 
-    # Format for frontend
     subs_list = []
     for _, row in subs_df.iterrows():
         subs_list.append({
@@ -752,7 +759,6 @@ async def get_subscriptions(
             "frequency": f"Detected {row['Count']} times"
         })
 
-    # Sort by most expensive
     subs_list = sorted(subs_list, key=lambda x: x['monthly_cost'], reverse=True)
 
     return {
@@ -761,23 +767,9 @@ async def get_subscriptions(
         "yearly_drain": round(yearly_drain, 2)
     }
 
-@app.get("/me")
-async def get_me(
-    current_user: User = Depends(get_current_user)
-):
-    return {
-        "id": current_user.id,
-        "email": current_user.email,
-        "first_name": getattr(current_user, 'first_name', ''),
-        "last_name": getattr(current_user, 'last_name', ''),
-        "mobile_no": getattr(current_user, 'mobile_no', ''),
-        "place": getattr(current_user, 'place', ''),
-        "address": getattr(current_user, 'address', ''),
-        "profile_pic": getattr(current_user, 'profile_pic', '')
-    }
 
 # ==========================================
-# 1. UPCOMING BILLS PREDICTOR ENGINE
+# 2. UPCOMING BILLS PREDICTOR ENGINE
 # ==========================================
 @app.get("/upcoming-bills/")
 async def get_upcoming_bills(
@@ -791,43 +783,52 @@ async def get_upcoming_bills(
     if not raw_history:
         return {"upcoming": [], "total_due": 0}
 
-    data = [{"Description": tx.description, "Amount": tx.amount, "Date": tx.date} for tx in raw_history]
+    data = [{"Description": tx.description, "Amount": tx.amount, "Date": tx.date, "Category": tx.category} for tx in raw_history]
     df = pd.DataFrame(data)
     expenses = df[df['Amount'] < 0].copy()
     
     if expenses.empty:
         return {"upcoming": [], "total_due": 0}
 
+    # Use the exact same smart normalizer
     def normalize_name(desc):
         name = str(desc).lower()
-        name = re.sub(r'[^a-z\s]', '', name)
+        name = re.sub(r'[^a-z\s]', ' ', name)
+        noise = ['upi', 'pos', 'neft', 'rtgs', 'nach', 'ach', 'razorpay', 'payu', 'payment', 'to', 'from', 'via', 'card', 'txn']
         words = name.split()
-        return words[0] if words else "unknown"
+        clean_words = [w for w in words if w not in noise and len(w) > 2]
+        return " ".join(clean_words[:2]) if clean_words else "unknown"
 
     expenses['Normalized'] = expenses['Description'].apply(normalize_name)
     
-    # Find recurring expenses
     grouped = expenses.groupby('Normalized').agg(
         Count=('Amount', 'size'),
         AvgAmount=('Amount', 'mean'),
         LastDate=('Date', 'max'),
-        OriginalName=('Description', 'first')
+        OriginalName=('Description', 'first'),
+        Category=('Category', 'first')
     ).reset_index()
     
-    subs_df = grouped[grouped['Count'] >= 2].copy()
+    subs_df = grouped[
+        (grouped['Count'] >= 2) & 
+        (~grouped['Category'].isin(['Food & Dining', 'Groceries', 'Shopping']))
+    ].copy()
     
     upcoming_list = []
     total_due = 0.0
-    
     today = datetime.utcnow()
     
     for _, row in subs_df.iterrows():
-        # Predict the next bill date (assuming monthly, add 30 days to the last payment)
-        next_due_date = row['LastDate'] + timedelta(days=30)
+        # --- SMART TIME TRAVEL CALCULATION ---
+        # Starts at the last payment date, and fast-forwards 30 days at a time until it hits the FUTURE
+        next_due_date = row['LastDate']
         
-        # Only show bills coming up in the next 30 days
+        while next_due_date.date() <= today.date():
+            next_due_date += timedelta(days=30)
+            
         days_until_due = (next_due_date - today).days
         
+        # Now we accurately check if it falls within the NEXT 30 days
         if 0 <= days_until_due <= 30:
             amt = round(abs(float(row['AvgAmount'])), 2)
             upcoming_list.append({
@@ -846,6 +847,25 @@ async def get_upcoming_bills(
         "upcoming": upcoming_list,
         "total_due": round(total_due, 2)
     }
+
+
+
+
+@app.get("/me")
+async def get_me(
+    current_user: User = Depends(get_current_user)
+):
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "first_name": getattr(current_user, 'first_name', ''),
+        "last_name": getattr(current_user, 'last_name', ''),
+        "mobile_no": getattr(current_user, 'mobile_no', ''),
+        "place": getattr(current_user, 'place', ''),
+        "address": getattr(current_user, 'address', ''),
+        "profile_pic": getattr(current_user, 'profile_pic', '')
+    }
+
 
 # ==========================================
 # 2. PDF REPORT GENERATOR ENGINE
