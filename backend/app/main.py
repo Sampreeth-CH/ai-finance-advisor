@@ -351,37 +351,40 @@ async def get_dashboard(
         }
 
     import pandas as pd
+    
+    # --- FIX 1: Add split_with so Pandas can see the names! ---
     data = [{
         "Amount": tx.amount,
         "Category": tx.category,
         "Description": tx.description,
-        "Date": tx.date
+        "Date": tx.date,
+        "split_with": tx.split_with  # <--- CRITICAL BRIDGE
     } for tx in raw_history]
     
     df = pd.DataFrame(data)
     
-    # 2. Run blazing-fast Pandas math
+    # 2. Run blazing-fast Pandas math (This now calculates your splits perfectly!)
     analysis = analyze_finances(df)
     calculated_score = calculate_finscore(raw_history)
 
-    # 3. Calculate Receivables
-    receivables = {}
-    for tx in raw_history:
-        if tx.split_with and tx.split_amount:
-            if tx.split_with in receivables:
-                receivables[tx.split_with] += tx.split_amount
-            else:
-                receivables[tx.split_with] = tx.split_amount
+    # --- FIX 2: Connect Pandas Math to React Frontend ---
+    # Grab the splits dictionary we generated in analyzer.py
+    analyzer_splits = analysis.get("splits", {})
+    
+    # Format it exactly how SplitsPage.jsx and ReceivablesWidget expect it
+    receivables_list = [
+        {"name": person, "amount": amount} 
+        for person, amount in analyzer_splits.items() 
+        if amount > 0
+    ]
 
-    receivables_list = [{"name": k, "amount": v} for k, v in receivables.items() if v > 0]
-
-    # NOTICE: We removed the AI call here! It returns instantly now.
+    # 3. Return the data
     return {
         "user": current_user.full_name or current_user.email,
         "total_transactions": len(raw_history),
         "analysis": analysis,
         "fin_score": calculated_score, 
-        "receivables": receivables_list
+        "receivables": receivables_list  # <--- WAKES UP YOUR FRONTEND!
     }
 
 # --- NEW: Dedicated endpoint just for the slow AI generation ---
