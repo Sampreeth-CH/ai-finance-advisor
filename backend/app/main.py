@@ -65,45 +65,71 @@ class ProfileUpdate(BaseModel):
 def calculate_finscore(transactions_list):
     """Calculates a proprietary FinScore (300 to 850) based on financial behavior."""
     base_score = 500
-    total_income = 0
-    total_expense = 0
-    junk_count = 0
+    total_income = 0.0
+    total_expense = 0.0
+    total_invested = 0.0
+    junk_expense = 0.0
     
-    # Keywords that indicate unnecessary spending
-    junk_keywords = ['swiggy', 'zomato', 'zepto', 'blinkit', 'starbucks', 'movie', 'zara', 'myntra', 'netflix', 'amazon', 'dining', 'food', 'shopping']
+    # We rely on your AI Categorizer categories instead of brittle keywords!
+    junk_categories = ['food & dining', 'shopping', 'entertainment & leisure']
+    investment_categories = ['investment & savings', 'investments', 'stocks', 'mutual funds']
     
     for tx in transactions_list:
         amount = float(tx.amount)
+        cat = str(tx.category).lower() if tx.category else "others"
         desc = str(tx.description).lower()
-        category = str(tx.category).lower() if tx.category else ""
         
         if amount > 0:
             total_income += amount
         else:
-            total_expense += abs(amount)
-            # Penalize junk spending
-            if any(keyword in desc for keyword in junk_keywords) or any(keyword in category for keyword in junk_keywords):
-                junk_count += 1
-
-    # 1. Savings Rate Bonus (Up to +250 points)
-    if total_income > 0:
-        savings_rate = (total_income - total_expense) / total_income
-        if savings_rate > 0:
-            base_score += int(savings_rate * 250)
-        else:
-            base_score -= 50  # Penalty for spending more than earning
+            abs_amount = abs(amount)
             
-    # 2. Junk Penalty (-15 points per junk transaction)
-    base_score -= (junk_count * 15)
-    
-    # 3. Consistency/Activity Bonus (+25 to +50 points for tracking consistently)
-    if len(transactions_list) > 10:
+            # --- FIX 1: Treat investments as a positive habit, not a draining expense ---
+            if any(inv_cat in cat for inv_cat in investment_categories) or "invest" in desc or "mutual fund" in desc or "sip" in desc:
+                total_invested += abs_amount
+            else:
+                total_expense += abs_amount
+                
+                # --- FIX 2: Track total MONEY spent on junk, rather than transaction count ---
+                if any(j_cat in cat for j_cat in junk_categories) or "swiggy" in desc or "zomato" in desc:
+                    junk_expense += abs_amount
+
+    # --- 1. Savings & Investment Rate Bonus (Up to +250 points) ---
+    if total_income > 0:
+        # Good money = Money you kept in the bank + Money you invested
+        good_money = (total_income - total_expense) + total_invested
+        savings_rate = good_money / total_income
+        
+        if savings_rate > 0:
+            # If they save/invest 20% of income, they get +50 points. 
+            # Maxes out safely at +250 points.
+            base_score += min(250, int(savings_rate * 250))
+        else:
+            # --- FIX 3: Proportional penalty for overspending! ---
+            # If they overspend by 20% of their income, they lose 20 points. (Max -150)
+            overspend_ratio = abs(savings_rate)
+            base_score -= min(150, int(overspend_ratio * 100))
+    elif total_expense > 0:
+         # Earning 0 but spending money heavily penalizes the score
+         base_score -= 100
+         
+    # --- 2. Junk Penalty (Based on % of expense, not count) ---
+    if total_expense > 0:
+        junk_ratio = junk_expense / total_expense
+        # If 50% of your expenses are junk, you lose 75 points. (Max -100 points)
+        base_score -= min(100, int(junk_ratio * 150))
+        
+    # --- 3. Consistency/Activity Bonus (+25 to +50 points) ---
+    tx_count = len(transactions_list)
+    if tx_count > 10:
         base_score += 25
-    if len(transactions_list) > 30:
+    if tx_count > 30:
         base_score += 25
         
-    # Clamp the score to look like a real credit score (300 min, 850 max)
+    # Clamp the score to strictly stay within the 300-850 range
     return max(300, min(850, base_score))
+
+
 
 # ==========================================
 # MODERN LIFESPAN: AUTO-CREATES TABLES IN SUPABASE
