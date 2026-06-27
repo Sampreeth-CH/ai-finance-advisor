@@ -1,10 +1,10 @@
 import React, { useState, useRef } from 'react'
-import Tesseract from 'tesseract.js'
-import { Camera, Loader2, CheckCircle } from 'lucide-react'
+import { Camera, Loader2 } from 'lucide-react'
+import api from '../services/api' // Make sure this path is correct for your Axios instance!
 
+// Notice we now pass BOTH merchant and amount back to the parent
 const ReceiptScanner = ({ onScanComplete }) => {
   const [isScanning, setIsScanning] = useState(false)
-  const [progress, setProgress] = useState(0)
   const fileInputRef = useRef(null)
 
   const handleImageUpload = async (e) => {
@@ -12,40 +12,28 @@ const ReceiptScanner = ({ onScanComplete }) => {
     if (!file) return
 
     setIsScanning(true)
-    setProgress(0)
 
     try {
-      // Run Tesseract OCR on the image
-      const result = await Tesseract.recognize(file, 'eng', {
-        logger: (m) => {
-          if (m.status === 'recognizing text') {
-            setProgress(Math.round(m.progress * 100))
-          }
-        },
+      // 1. Pack the image into a FormData object
+      const formData = new FormData()
+      formData.append('file', file)
+
+      // 2. Send it to our new Vision AI backend
+      const response = await api.post('/scan-receipt/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       })
 
-      const text = result.data.text
-
-      // Clever Regex to find currency amounts (e.g., 150.00, ₹150, Rs. 150)
-      const amountRegex =
-        /(?:rs\.?|inr|₹|\$)?\s*(\d{1,5}(?:,\d{3})*(?:\.\d{2})?)/gi
-      const matches = [...text.matchAll(amountRegex)]
-
-      let highestAmount = 0
-
-      if (matches.length > 0) {
-        // Assume the highest number on the receipt is the Total Amount
-        matches.forEach((match) => {
-          const num = parseFloat(match[1].replace(/,/g, ''))
-          if (num > highestAmount) highestAmount = num
-        })
+      if (response.data.error) {
+        throw new Error(response.data.error)
       }
 
-      // Pass the found amount back to the parent component
-      onScanComplete(highestAmount > 0 ? highestAmount.toFixed(2) : '')
+      const { merchant, amount } = response.data
+
+      // 3. Send the AI's findings back to your main form!
+      onScanComplete(amount > 0 ? amount : '', merchant || '')
     } catch (error) {
-      console.error('OCR Error:', error)
-      alert('Failed to read the receipt. Please try a clearer image.')
+      console.error('Vision API Error:', error)
+      alert('AI failed to read the receipt. Please ensure the image is clear.')
     } finally {
       setIsScanning(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -59,7 +47,7 @@ const ReceiptScanner = ({ onScanComplete }) => {
         ref={fileInputRef}
         onChange={handleImageUpload}
         accept='image/*'
-        capture='environment' // Opens camera on mobile!
+        capture='environment'
         className='hidden'
       />
 
@@ -76,7 +64,7 @@ const ReceiptScanner = ({ onScanComplete }) => {
         {isScanning ? (
           <>
             <Loader2 className='animate-spin' size={20} />
-            Scanning Receipt... {progress}%
+            AI is analyzing receipt...
           </>
         ) : (
           <>
