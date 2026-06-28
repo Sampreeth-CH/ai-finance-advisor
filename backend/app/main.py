@@ -572,9 +572,9 @@ Do not include any markdown, backticks, or conversational text."""
             "Content-Type": "application/json"
         }
         
-        # We use the specific Vision model here!
+        # --- FIXED: Updated to Groq's active 90B Vision model ---
         payload = {
-            "model": "llama-3.2-11b-vision-preview",
+            "model": "llama-3.2-90b-vision-preview",
             "messages": [
                 {
                     "role": "user",
@@ -613,8 +613,7 @@ Do not include any markdown, backticks, or conversational text."""
     except Exception as e:
         print(f"Receipt scan failed: {str(e)}")
         return {"error": "Failed to read receipt"}
-
-
+    
 
 from fastapi import HTTPException
 from sqlalchemy import select
