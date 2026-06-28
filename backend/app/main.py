@@ -65,45 +65,77 @@ class ProfileUpdate(BaseModel):
 def calculate_finscore(transactions_list):
     """Calculates a proprietary FinScore (300 to 850) based on financial behavior."""
     base_score = 500
-    total_income = 0
-    total_expense = 0
-    junk_count = 0
+    total_income = 0.0
+    total_expense = 0.0
+    total_invested = 0.0
+    junk_expense = 0.0
     
-    # Keywords that indicate unnecessary spending
-    junk_keywords = ['swiggy', 'zomato', 'zepto', 'blinkit', 'starbucks', 'movie', 'zara', 'myntra', 'netflix', 'amazon', 'dining', 'food', 'shopping']
+    junk_categories = ['food & dining', 'shopping', 'entertainment & leisure']
+    investment_categories = ['investment & savings', 'investments', 'stocks', 'mutual funds']
     
     for tx in transactions_list:
         amount = float(tx.amount)
+        cat = str(tx.category).lower() if tx.category else "others"
         desc = str(tx.description).lower()
-        category = str(tx.category).lower() if tx.category else ""
         
         if amount > 0:
             total_income += amount
         else:
-            total_expense += abs(amount)
-            # Penalize junk spending
-            if any(keyword in desc for keyword in junk_keywords) or any(keyword in category for keyword in junk_keywords):
-                junk_count += 1
-
-    # 1. Savings Rate Bonus (Up to +250 points)
-    if total_income > 0:
-        savings_rate = (total_income - total_expense) / total_income
-        if savings_rate > 0:
-            base_score += int(savings_rate * 250)
-        else:
-            base_score -= 50  # Penalty for spending more than earning
+            abs_amount = abs(amount)
             
-    # 2. Junk Penalty (-15 points per junk transaction)
-    base_score -= (junk_count * 15)
-    
-    # 3. Consistency/Activity Bonus (+25 to +50 points for tracking consistently)
-    if len(transactions_list) > 10:
+            # Separate Investments from Lifestyle Expenses
+            if any(inv_cat in cat for inv_cat in investment_categories) or "invest" in desc or "mutual fund" in desc or "sip" in desc:
+                total_invested += abs_amount
+            else:
+                total_expense += abs_amount
+                
+                # Track Junk Spending
+                if any(j_cat in cat for j_cat in junk_categories) or "swiggy" in desc or "zomato" in desc:
+                    junk_expense += abs_amount
+
+    # --- 1. Savings Rate Engine ---
+    if total_income > 0:
+        # How much of the income was NOT wasted on regular lifestyle expenses?
+        savings_rate = (total_income - total_expense) / total_income
+        
+        if savings_rate >= 0.20:
+            # Gold standard: Kept 20%+ of income
+            base_score += 150
+        elif savings_rate > 0:
+            # Kept some income, but less than 20%
+            base_score += int(savings_rate * 500) 
+        else:
+            # NEGATIVE BALANCE: Spent more on lifestyle than they earned!
+            overspend_ratio = abs(savings_rate)
+            # CRITICAL FIX: Heavy penalty for overspending (Drops score by up to 300 points)
+            base_score -= min(300, int(overspend_ratio * 300))
+            
+        # --- 2. Investment Bonus ---
+        if total_invested > 0:
+            invest_rate = total_invested / total_income
+            base_score += min(100, int(invest_rate * 500)) # Max +100 points
+            
+    elif total_expense > 0:
+         # Bleeding cash with zero income
+         base_score -= 150
+         
+    # --- 3. Junk Penalty ---
+    if total_expense > 0:
+        junk_ratio = junk_expense / total_expense
+        # If 50% of expenses are junk, lose 100 points (Max -150 penalty)
+        base_score -= min(150, int(junk_ratio * 200))
+        
+    # --- 4. Consistency Bonus ---
+    tx_count = len(transactions_list)
+    if tx_count > 10:
         base_score += 25
-    if len(transactions_list) > 30:
+    if tx_count > 30:
         base_score += 25
         
-    # Clamp the score to look like a real credit score (300 min, 850 max)
+    # Clamp the score to strictly stay within the 300-850 range
     return max(300, min(850, base_score))
+
+
 
 # ==========================================
 # MODERN LIFESPAN: AUTO-CREATES TABLES IN SUPABASE
@@ -546,9 +578,9 @@ Do not include any markdown, backticks, or conversational text."""
             "Content-Type": "application/json"
         }
         
-        # We use the specific Vision model here!
+        # --- FIXED: Updated to Groq's active 90B Vision model ---
         payload = {
-            "model": "llama-3.2-11b-vision-preview",
+            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
             "messages": [
                 {
                     "role": "user",
@@ -587,8 +619,7 @@ Do not include any markdown, backticks, or conversational text."""
     except Exception as e:
         print(f"Receipt scan failed: {str(e)}")
         return {"error": "Failed to read receipt"}
-
-
+    
 
 from fastapi import HTTPException
 from sqlalchemy import select
