@@ -70,7 +70,6 @@ def calculate_finscore(transactions_list):
     total_invested = 0.0
     junk_expense = 0.0
     
-    # We rely on your AI Categorizer categories instead of brittle keywords!
     junk_categories = ['food & dining', 'shopping', 'entertainment & leisure']
     investment_categories = ['investment & savings', 'investments', 'stocks', 'mutual funds']
     
@@ -84,42 +83,49 @@ def calculate_finscore(transactions_list):
         else:
             abs_amount = abs(amount)
             
-            # --- FIX 1: Treat investments as a positive habit, not a draining expense ---
+            # Separate Investments from Lifestyle Expenses
             if any(inv_cat in cat for inv_cat in investment_categories) or "invest" in desc or "mutual fund" in desc or "sip" in desc:
                 total_invested += abs_amount
             else:
                 total_expense += abs_amount
                 
-                # --- FIX 2: Track total MONEY spent on junk, rather than transaction count ---
+                # Track Junk Spending
                 if any(j_cat in cat for j_cat in junk_categories) or "swiggy" in desc or "zomato" in desc:
                     junk_expense += abs_amount
 
-    # --- 1. Savings & Investment Rate Bonus (Up to +250 points) ---
+    # --- 1. Savings Rate Engine ---
     if total_income > 0:
-        # Good money = Money you kept in the bank + Money you invested
-        good_money = (total_income - total_expense) + total_invested
-        savings_rate = good_money / total_income
+        # How much of the income was NOT wasted on regular lifestyle expenses?
+        savings_rate = (total_income - total_expense) / total_income
         
-        if savings_rate > 0:
-            # If they save/invest 20% of income, they get +50 points. 
-            # Maxes out safely at +250 points.
-            base_score += min(250, int(savings_rate * 250))
+        if savings_rate >= 0.20:
+            # Gold standard: Kept 20%+ of income
+            base_score += 150
+        elif savings_rate > 0:
+            # Kept some income, but less than 20%
+            base_score += int(savings_rate * 500) 
         else:
-            # --- FIX 3: Proportional penalty for overspending! ---
-            # If they overspend by 20% of their income, they lose 20 points. (Max -150)
+            # NEGATIVE BALANCE: Spent more on lifestyle than they earned!
             overspend_ratio = abs(savings_rate)
-            base_score -= min(150, int(overspend_ratio * 100))
+            # CRITICAL FIX: Heavy penalty for overspending (Drops score by up to 300 points)
+            base_score -= min(300, int(overspend_ratio * 300))
+            
+        # --- 2. Investment Bonus ---
+        if total_invested > 0:
+            invest_rate = total_invested / total_income
+            base_score += min(100, int(invest_rate * 500)) # Max +100 points
+            
     elif total_expense > 0:
-         # Earning 0 but spending money heavily penalizes the score
-         base_score -= 100
+         # Bleeding cash with zero income
+         base_score -= 150
          
-    # --- 2. Junk Penalty (Based on % of expense, not count) ---
+    # --- 3. Junk Penalty ---
     if total_expense > 0:
         junk_ratio = junk_expense / total_expense
-        # If 50% of your expenses are junk, you lose 75 points. (Max -100 points)
-        base_score -= min(100, int(junk_ratio * 150))
+        # If 50% of expenses are junk, lose 100 points (Max -150 penalty)
+        base_score -= min(150, int(junk_ratio * 200))
         
-    # --- 3. Consistency/Activity Bonus (+25 to +50 points) ---
+    # --- 4. Consistency Bonus ---
     tx_count = len(transactions_list)
     if tx_count > 10:
         base_score += 25
@@ -574,7 +580,7 @@ Do not include any markdown, backticks, or conversational text."""
         
         # --- FIXED: Updated to Groq's active 90B Vision model ---
         payload = {
-            "model": "llama-3.2-90b-vision-preview",
+            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
             "messages": [
                 {
                     "role": "user",
