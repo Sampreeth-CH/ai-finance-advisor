@@ -288,7 +288,7 @@ const DashboardPage = () => {
             <div className='flex items-center gap-3 text-cyan-400 py-4'>
               <div className='w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin'></div>
               <p className='text-sm font-medium animate-pulse'>
-                Llama 3.3 is analyzing your latest data...
+                AI is analyzing your latest data...
               </p>
             </div>
           ) : aiInsight ? (

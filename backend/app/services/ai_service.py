@@ -20,7 +20,6 @@ def generate_ai_insights_llm(analysis, history_data=None, language="English"): #
         for tx in history_data[:10]: # Limit to 10 so we don't overwhelm the prompt
             context += f"- {tx.get('date')}: {tx.get('description')} (₹{tx.get('amount')})\n"
 
-    # 2. Instruct Llama 3.3 exactly how to write the dashboard report
     prompt = f"""You are an expert AI Personal Finance Advisor.
 Analyze the user's current financial snapshot:
 
