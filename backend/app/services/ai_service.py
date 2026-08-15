@@ -53,7 +53,7 @@ If {language} is Hindi, write strictly in Devanagari script.
         }
         
         data = {
-            "model": "llama-3.3-70b-versatile", # Using the brand new, supported model!
+            "model": "openai/gpt-oss-120b", # Using the brand new, supported model!
             "messages": [
                 {"role": "user", "content": prompt}
             ],

@@ -7,15 +7,57 @@ import { Wallet, LogIn, AlertCircle } from 'lucide-react'
 const LoginPage = () => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const navigate = useNavigate()
 
-  // Pull all needed states and actions from the store
+  // --- FIX Step 1: Add a local state buffer to protect the error timing ---
+  const [localError, setLocalError] = useState(null)
+
+  const navigate = useNavigate()
   const { login, loading, error, clearError } = useAppStore()
 
-  // Clear any existing errors when the page first loads
   useEffect(() => {
     clearError()
-  }, [clearError])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // --- FIX Step 2: Intercept global error and lock it for 3 seconds ---
+  useEffect(() => {
+    if (error) {
+      let errMsg = 'Login failed. Please try again.'
+
+      // Smart Auth Translator logic built straight in
+      if (typeof error === 'string') {
+        if (
+          error.includes('401') ||
+          error.toLowerCase().includes('unauthorized')
+        ) {
+          errMsg = 'Incorrect email or password.'
+        } else {
+          errMsg = error
+        }
+      } else if (error && typeof error === 'object') {
+        if (error?.response?.status === 401) {
+          errMsg = 'Incorrect email or password.'
+        } else {
+          errMsg =
+            error?.response?.data?.detail ||
+            error?.response?.data?.message ||
+            error?.message ||
+            errMsg
+        }
+      }
+
+      // Save it locally
+      setLocalError(errMsg)
+
+      // Force it to stay visible for exactly 3000ms (3 seconds)
+      const timer = setTimeout(() => {
+        setLocalError(null)
+        clearError()
+      }, 3000)
+
+      return () => clearTimeout(timer)
+    }
+  }, [error, clearError])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -25,9 +67,9 @@ const LoginPage = () => {
     }
   }
 
-  // Clear the error as soon as the user starts typing to fix their mistake
   const handleInputChange = (setter) => (e) => {
     if (error) clearError()
+    if (localError) setLocalError(null) // Instantly clear error if user starts typing
     setter(e.target.value)
   }
 
@@ -53,9 +95,9 @@ const LoginPage = () => {
           </p>
         </div>
 
-        {/* Smoothly animated error banner */}
+        {/* Smoothly animated error banner hooked into local state buffer */}
         <AnimatePresence>
-          {error && (
+          {localError && (
             <motion.div
               initial={{ opacity: 0, height: 0, mb: 0 }}
               animate={{ opacity: 1, height: 'auto', mb: 24 }}
@@ -63,8 +105,7 @@ const LoginPage = () => {
               className='bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm flex items-start gap-3 overflow-hidden'
             >
               <AlertCircle size={18} className='shrink-0 mt-0.5' />
-              {/* --- FIXED: Force the error to be a string --- */}
-              <span>{String(error)}</span>
+              <span>{localError}</span>
             </motion.div>
           )}
         </AnimatePresence>
