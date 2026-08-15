@@ -4,11 +4,11 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Generative AI](https://img.shields.io/badge/Gen_AI-Llama_3.3_&_4-000000?style=for-the-badge&logo=meta&logoColor=blue)
+![Generative AI](https://img.shields.io/badge/Gen_AI-GPT_OSS_120B_&_Llama_4-000000?style=for-the-badge&logo=openai&logoColor=white)
 ![Pandas](https://img.shields.io/badge/Pandas-150458?style=for-the-badge&logo=pandas&logoColor=white)
 ![Tailwind](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
 
-Finova is a full-stack, autonomous wealth-management platform designed to replace manual budgeting with intelligent, LLM-driven automation. Built collaboratively by a team of passionate developers, Finova integrates cutting-edge Generative AI (Meta's Llama models via Groq) with high-speed Pandas data processing. It acts as a personalized Chief Financial Officer (CFO)—tracking expenses, forecasting bills, and actively advising on wealth generation.
+Finova is a full-stack, autonomous wealth-management platform designed to replace manual budgeting with intelligent, LLM-driven automation. Built collaboratively by a team of passionate developers, Finova integrates cutting-edge Generative AI (OpenAI's GPT OSS 120B and Meta's Llama 4 Vision via Groq) with high-speed Pandas data processing. It acts as a personalized Chief Financial Officer (CFO)—tracking expenses, forecasting bills, and actively advising on wealth generation.
 
 ---
 
@@ -39,7 +39,7 @@ Finova goes beyond standard expense tracking by offering autonomous, AI-driven i
 ### 🤖 Voice-Enabled AI Copilot
 A conversational financial assistant built directly into the dashboard. 
 * Powered by the browser's native **Web Speech API** for local, low-latency Speech-to-Text and Text-to-Speech translation.
-* Uses **Llama 3.3 (70B)** to process natural language queries (e.g., *"How much did I spend on food this month?"*) and returns context-aware financial advice through customizable personas (The Banker, Strict Parent, The Roaster).
+* Uses **GPT OSS (120B)** to process natural language queries (e.g., *"How much did I spend on food this month?"*) and returns context-aware financial advice through customizable personas (The Banker, Strict Parent, The Roaster).
 
 ### 📸 Vision AI Receipt Scanner
 Replaces brittle, legacy OCR libraries (like Tesseract) with state-of-the-art Large Multimodal Models (LMMs).
@@ -98,7 +98,7 @@ Finova operates on a highly decoupled Client-Server architecture, ensuring enter
 
 ### 4. AI Microservices
 * **Infrastructure:** Groq API Cloud for ultra-low latency inference.
-* **Models:** Meta Llama-3.3-70b-versatile (Text) & Llama-4-scout-17b-16e-instruct (Vision).
+* **Models:** OpenAI `openai/gpt-oss-120b` (Text & Conversational Copilot) & Meta `llama-4-scout-17b-16e-instruct` (Vision).
 
 ---
 
